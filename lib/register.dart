@@ -252,20 +252,18 @@ class _RegisterState extends State<Register> {
                           );
 
                           // Si el usuario seleccionó una fecha y no le dio a "Cancelar"
-                          if (fechaSeleccionada != null) {
-                            // Formateamos la fecha exactamente como la quiere Spring Boot: YYYY-MM-DD
-                            String anio = fechaSeleccionada.year.toString();
-                            String mes = fechaSeleccionada.month.toString().padLeft(2, '0');
-                            String dia = fechaSeleccionada.day.toString().padLeft(2, '0');
+                          // Formateamos la fecha exactamente como la quiere Spring Boot: YYYY-MM-DD
+                          String anio = fechaSeleccionada!.year.toString();
+                          String mes = fechaSeleccionada.month.toString().padLeft(2, '0');
+                          String dia = fechaSeleccionada.day.toString().padLeft(2, '0');
 
-                            String fechaFormateada = "$anio-$mes-$dia";
+                          String fechaFormateada = "$anio-$mes-$dia";
 
-                            // Actualizamos el campo de texto para que el usuario vea la fecha
-                            setState(() {
-                              controladorFechaNacimiento.text = fechaFormateada;
-                            });
-                          }
-                        },
+                          // Actualizamos el campo de texto para que el usuario vea la fecha
+                          setState(() {
+                            controladorFechaNacimiento.text = fechaFormateada;
+                          });
+                                                },
 
                         // Aquí va tu validador
                         validator: (value) {
