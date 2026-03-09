@@ -46,10 +46,9 @@ class MenuPrincipal extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Image.asset(
-              'assets/logo.png', // La misma ruta que pusiste en el yaml
-              width: 150, // Ajusta el tamaño como prefieras
+              'assets/logo.png',
+              width: 150,
               height: 150,
-              // Opcional: si quieres asegurarte de que encaje bien
               fit: BoxFit.contain,
             ),
             const SizedBox(height: 20),

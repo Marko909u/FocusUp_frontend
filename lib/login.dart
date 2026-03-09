@@ -31,22 +31,20 @@ class _LoginState extends State<Login> {
     );
 
     if (response.statusCode == 200) {
-      // 1. El token es directamente el cuerpo de la respuesta
       final String token = response.body;
 
-      // 2. Lo guardamos en la memoria del teléfono
+
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('jwt_token', token);
 
       print("¡Login exitoso! Redirigiendo a la pantalla principal...");
 
-      // 3. Navegamos a la PaginaPrincipal y evitamos que el usuario pueda volver atrás al Login
-      if (mounted) { // Buena práctica en Flutter antes de navegar tras un 'await'
+
+      if (mounted) {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
             builder: (context) => PaginaPrincipal(
-              // Le pasamos el nombre que el usuario escribió en el TextField
               nombreUsuario: controladorUsuario.text,
             ),
           ),
@@ -70,7 +68,6 @@ class _LoginState extends State<Login> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
-                // Espaciador superior o logo
                 Padding(
                   padding: const EdgeInsets.only(top: 20.0, bottom: 20.0),
                   child: Center(

@@ -13,18 +13,15 @@ class Register extends StatefulWidget {
 class _RegisterState extends State<Register> {
   Map userData = {};
   final _formkey = GlobalKey<FormState>();
-  // 1. Declarar los controladores aquí arriba
   final controladorUsuario = TextEditingController();
   final controladorEmail = TextEditingController();
   final controladorPassword = TextEditingController();
   final controladorNombre = TextEditingController();
   final controladorApellidos = TextEditingController();
   final controladorFechaNacimiento = TextEditingController();
-  // Recuerda importar estos paquetes arriba del tod0 en tu archivo:
-  // import 'package:http/http.dart' as http;
-  // import 'dart:convert';
 
-  // ... (sigue abajo)
+
+
   Future<void> registrarUsuario() async {
     final url = Uri.parse('http://10.1.105.25:8080/api/auth/register');
 
@@ -53,34 +50,31 @@ class _RegisterState extends State<Register> {
         body: jsonEncode(datosRegistro), // Queda mucho más limpio así
       );
 
-      // ... (tu código del http.post) ...
+
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         print("¡Registro exitoso en consola!");
 
-        // 1. Verificamos que la pantalla siga abierta después de la espera de red (buena práctica)
+
         if (!mounted) return;
 
-        // 2. Mostramos el mensaje verde de éxito
+
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
               '¡Registro exitoso! Ya puedes iniciar sesión.',
               style: TextStyle(color: Colors.white, fontSize: 16),
             ),
-            backgroundColor: Colors.green, // Color verde para indicar éxito
-            duration: Duration(seconds: 3), // Tiempo que estará en pantalla
-            behavior: SnackBarBehavior.floating, // Hace que flote con bordes redondeados
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 3),
+            behavior: SnackBarBehavior.floating,
           ),
         );
 
-        // 3. Opcional: Redirigir al usuario automáticamente a la pantalla de Login
-        // Navigator.pop(context); // Si vinieron desde el login, esto los devuelve allí
+
 
       } else {
-        // ... (tu código de error) ...
 
-        // ¡También puedes usar un SnackBar rojo para los errores!
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -229,18 +223,16 @@ class _RegisterState extends State<Register> {
                       padding: const EdgeInsets.all(8.0),
                       child: TextFormField(
                         controller: controladorFechaNacimiento,
-                        readOnly: true, // ¡Súper importante! Evita que se abra el teclado del móvil
+                        readOnly: true,
                         decoration: InputDecoration(
                           labelText: "Fecha de nacimiento",
                           hintText: "Selecciona una fecha",
-                          prefixIcon: Icon(Icons.calendar_today), // Un icono para que quede bonito
+                          prefixIcon: Icon(Icons.calendar_today),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(10),
                           ),
                         ),
-                        // La magia ocurre cuando el usuario toca el campo
                         onTap: () async {
-                          // Esconde el teclado por si estaba abierto de otro campo
                           FocusScope.of(context).requestFocus(FocusNode());
 
                           // Abre el calendario de Flutter
@@ -264,13 +256,11 @@ class _RegisterState extends State<Register> {
                             controladorFechaNacimiento.text = fechaFormateada;
                           });
                                                 },
-
-                        // Aquí va tu validador
                         validator: (value) {
                           if (value == null || value.isEmpty) {
                             return "La fecha de nacimiento es obligatoria";
                           }
-                          return null; // Nulo significa que tod0 está correcto
+                          return null;
                         },
                       )
                     ),
@@ -306,8 +296,6 @@ class _RegisterState extends State<Register> {
                       child: Padding(
                         padding: const EdgeInsets.all(18.0),
                         child: Container(
-                          // Usamos double.infinity para que ocupe tod0 el ancho disponible
-                          // es más limpio que MediaQuery, aunque tu métod0 también funciona.
                           width: MediaQuery.of(context).size.width,
                           height: 50,
                           child: ElevatedButton(
