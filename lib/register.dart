@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:form_field_validator/form_field_validator.dart';
-import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
+import 'package:dio/dio.dart'; // Importamos Dio
+import 'api_service.dart'; // Importamos tu servicio centralizado
+
 class Register extends StatefulWidget {
   const Register({Key? key}) : super(key: key);
 
@@ -11,7 +11,6 @@ class Register extends StatefulWidget {
 }
 
 class _RegisterState extends State<Register> {
-  Map userData = {};
   final _formkey = GlobalKey<FormState>();
   final controladorUsuario = TextEditingController();
   final controladorEmail = TextEditingController();
@@ -20,78 +19,88 @@ class _RegisterState extends State<Register> {
   final controladorApellidos = TextEditingController();
   final controladorFechaNacimiento = TextEditingController();
 
-
+  // NUEVO: Variable para controlar la ruedita de carga
+  bool _isLoading = false;
 
   Future<void> registrarUsuario() async {
-    final url = Uri.parse('http://10.1.105.25:8080/api/auth/register');
+    // NUEVO: Activamos la ruedita de carga
+    setState(() {
+      _isLoading = true;
+    });
 
-    // 1. Agrupamos todos los datos en un Mapa (diccionario)
     final Map<String, dynamic> datosRegistro = {
-      "username": controladorUsuario.text,
-      "nom": controladorNombre.text,
-      "email": controladorEmail.text,
-      "password": controladorPassword.text,
-      "cognoms": controladorApellidos.text,
-      "data_naixement": controladorFechaNacimiento.text
+      "username": controladorUsuario.text.trim(),
+      "nom": controladorNombre.text.trim(),
+      "email": controladorEmail.text.trim(),
+      "password": controladorPassword.text.trim(),
+      "cognoms": controladorApellidos.text.trim(),
+      "data_naixement": controladorFechaNacimiento.text.trim()
     };
 
-    // 2. ¡Printeamos los datos en la consola!
     print("=== DATOS QUE SE VAN A ENVIAR ===");
-    // Usamos jsonEncode aquí también para verlo exactamente con el formato
-    // que le llegará al Spring Boot de tu compañero
-    print(jsonEncode(datosRegistro));
+    print(datosRegistro);
     print("=================================");
 
     try {
-      // 3. Enviamos la petición usando la variable que creamos arriba
-      final response = await http.post(
-        url,
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode(datosRegistro), // Queda mucho más limpio así
+      // NUEVO: Usamos tu apiService global (que ya tiene la IP configurada)
+      final response = await apiService.post(
+        '/auth/register',
+        data: datosRegistro,
       );
 
+      // Si llegamos aquí, el statusCode es 200 o 201 automáticamente gracias a Dio
+      print("¡Registro exitoso en consola!");
 
+      if (!mounted) return;
 
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        print("¡Registro exitoso en consola!");
-
-
-        if (!mounted) return;
-
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              '¡Registro exitoso! Ya puedes iniciar sesión.',
-              style: TextStyle(color: Colors.white, fontSize: 16),
-            ),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 3),
-            behavior: SnackBarBehavior.floating,
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            '¡Registro exitoso! Ya puedes iniciar sesión.',
+            style: TextStyle(color: Colors.white, fontSize: 16),
           ),
-        );
+          backgroundColor: Colors.green,
+          duration: Duration(seconds: 3),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
 
+      // NUEVO: Volvemos a la pantalla de Login automáticamente
+      Navigator.pop(context);
 
+    } on DioException catch (e) {
+      // NUEVO: Manejo de errores de Dio
+      print("Error de conexión: ${e.response?.data}");
 
-      } else {
+      if (!mounted) return;
 
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error en el registro: Verifica tus datos.'),
-            backgroundColor: Colors.red,
-          ),
-        );
+      String mensajeError = 'Error en el registro: Verifica tus datos.';
+      // Si Javier envía un mensaje de error específico, lo mostramos
+      if (e.response?.data != null && e.response?.data['message'] != null) {
+        mensajeError = e.response?.data['message'];
       }
-    } catch (e) {
-      print("Error de conexión: $e");
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(mensajeError),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      // NUEVO: Apagamos la ruedita de carga pase lo que pase
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
         appBar: AppBar(
-          title: Text('registro'),
+          title: Text('Registro'),
         ),
         body: SingleChildScrollView(
           child: Padding(
@@ -106,30 +115,17 @@ class _RegisterState extends State<Register> {
                       child: Center(
                         child: Container(
                           width: 200,
-                          height: 150,
-                          //decoration: BoxDecoration(
-                          //borderRadius: BorderRadius.circular(40),
-                          //border: Border.all(color: Colors.blueGrey)),
+                          height: 50, // Lo he reducido un poco para que no ocupe tanto
                         ),
                       ),
                     ),
                     Padding(
                       padding: const EdgeInsets.all(12.0),
                       child: TextFormField(
-                          controller: controladorUsuario,
-                        // validator: ((value) {
-                        //   if (value == null || value.isEmpty) {
-                        //     return 'please enter some text';
-                        //   } else if (value.length < 5) {
-                        //     return 'Enter atleast 5 Charecter';
-                        //   }
-
-                        //   return null;
-                        // }),
+                        controller: controladorUsuario,
                         validator: MultiValidator([
                           RequiredValidator(errorText: 'Introduzca su nombre de usuario'),
                         ]),
-
                         decoration: InputDecoration(
                             hintText: 'Introduzca su nombre de usuario',
                             labelText: 'Usuario',
@@ -137,7 +133,7 @@ class _RegisterState extends State<Register> {
                               Icons.person,
                               color: Colors.blue,
                             ),
-                            errorStyle: TextStyle(fontSize: 18.0),
+                            errorStyle: TextStyle(fontSize: 14.0),
                             border: OutlineInputBorder(
                                 borderSide: BorderSide(color: Colors.red),
                                 borderRadius:
@@ -148,19 +144,9 @@ class _RegisterState extends State<Register> {
                       padding: const EdgeInsets.all(12.0),
                       child: TextFormField(
                         controller: controladorNombre,
-                        // validator: ((value) {
-                        //   if (value == null || value.isEmpty) {
-                        //     return 'please enter some text';
-                        //   } else if (value.length < 5) {
-                        //     return 'Enter atleast 5 Charecter';
-                        //   }
-
-                        //   return null;
-                        // }),
                         validator: MultiValidator([
                           RequiredValidator(errorText: 'Introduzca su nombre'),
                         ]),
-
                         decoration: InputDecoration(
                             hintText: 'Introduzca su nombre',
                             labelText: 'Nombre',
@@ -168,7 +154,7 @@ class _RegisterState extends State<Register> {
                               Icons.person,
                               color: Colors.green,
                             ),
-                            errorStyle: TextStyle(fontSize: 18.0),
+                            errorStyle: TextStyle(fontSize: 14.0),
                             border: OutlineInputBorder(
                                 borderSide: BorderSide(color: Colors.red),
                                 borderRadius:
@@ -189,7 +175,7 @@ class _RegisterState extends State<Register> {
                               Icons.person,
                               color: Colors.grey,
                             ),
-                            errorStyle: TextStyle(fontSize: 18.0),
+                            errorStyle: TextStyle(fontSize: 14.0),
                             border: OutlineInputBorder(
                                 borderSide: BorderSide(color: Colors.red),
                                 borderRadius:
@@ -202,8 +188,7 @@ class _RegisterState extends State<Register> {
                         controller: controladorEmail,
                         validator: MultiValidator([
                           RequiredValidator(errorText: 'Introduzca un email'),
-                          EmailValidator(
-                              errorText: 'Email invalido'),
+                          EmailValidator(errorText: 'Email invalido'),
                         ]),
                         decoration: InputDecoration(
                             hintText: 'Introduzca un email',
@@ -212,7 +197,7 @@ class _RegisterState extends State<Register> {
                               Icons.email,
                               color: Colors.lightBlue,
                             ),
-                            errorStyle: TextStyle(fontSize: 18.0),
+                            errorStyle: TextStyle(fontSize: 14.0),
                             border: OutlineInputBorder(
                                 borderSide: BorderSide(color: Colors.red),
                                 borderRadius:
@@ -220,49 +205,46 @@ class _RegisterState extends State<Register> {
                       ),
                     ),
                     Padding(
-                      padding: const EdgeInsets.all(8.0),
-                      child: TextFormField(
-                        controller: controladorFechaNacimiento,
-                        readOnly: true,
-                        decoration: InputDecoration(
-                          labelText: "Fecha de nacimiento",
-                          hintText: "Selecciona una fecha",
-                          prefixIcon: Icon(Icons.calendar_today),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
+                        padding: const EdgeInsets.all(8.0),
+                        child: TextFormField(
+                          controller: controladorFechaNacimiento,
+                          readOnly: true,
+                          decoration: InputDecoration(
+                            labelText: "Fecha de nacimiento",
+                            hintText: "Selecciona una fecha",
+                            prefixIcon: Icon(Icons.calendar_today),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
                           ),
-                        ),
-                        onTap: () async {
-                          FocusScope.of(context).requestFocus(FocusNode());
+                          onTap: () async {
+                            FocusScope.of(context).requestFocus(FocusNode());
+                            DateTime? fechaSeleccionada = await showDatePicker(
+                              context: context,
+                              initialDate: DateTime(2000),
+                              firstDate: DateTime(1900),
+                              lastDate: DateTime.now(),
+                            );
 
-                          // Abre el calendario de Flutter
-                          DateTime? fechaSeleccionada = await showDatePicker(
-                            context: context,
-                            initialDate: DateTime(2000), // Fecha que se muestra al abrir (ej. año 2000)
-                            firstDate: DateTime(1900),   // Nadie nació antes de 1900
-                            lastDate: DateTime.now(),    // No pueden nacer en el futuro
-                          );
+                            if (fechaSeleccionada != null) {
+                              String anio = fechaSeleccionada.year.toString();
+                              String mes = fechaSeleccionada.month.toString().padLeft(2, '0');
+                              String dia = fechaSeleccionada.day.toString().padLeft(2, '0');
 
-                          // Si el usuario seleccionó una fecha y no le dio a "Cancelar"
-                          // Formateamos la fecha exactamente como la quiere Spring Boot: YYYY-MM-DD
-                          String anio = fechaSeleccionada!.year.toString();
-                          String mes = fechaSeleccionada.month.toString().padLeft(2, '0');
-                          String dia = fechaSeleccionada.day.toString().padLeft(2, '0');
+                              String fechaFormateada = "$anio-$mes-$dia";
 
-                          String fechaFormateada = "$anio-$mes-$dia";
-
-                          // Actualizamos el campo de texto para que el usuario vea la fecha
-                          setState(() {
-                            controladorFechaNacimiento.text = fechaFormateada;
-                          });
-                                                },
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return "La fecha de nacimiento es obligatoria";
-                          }
-                          return null;
-                        },
-                      )
+                              setState(() {
+                                controladorFechaNacimiento.text = fechaFormateada;
+                              });
+                            }
+                          },
+                          validator: (value) {
+                            if (value == null || value.isEmpty) {
+                              return "La fecha de nacimiento es obligatoria";
+                            }
+                            return null;
+                          },
+                        )
                     ),
                     Padding(
                       padding: const EdgeInsets.all(8.0),
@@ -272,8 +254,7 @@ class _RegisterState extends State<Register> {
                         validator: MultiValidator([
                           RequiredValidator(errorText: 'Introduzca una contraseña'),
                           MinLengthValidator(8,
-                              errorText:
-                              'La contraseña debe ser almenos de 8 caracteres'),
+                              errorText: 'La contraseña debe ser al menos de 8 caracteres'),
                           PatternValidator(r'[A-Z]', errorText: 'Debe contener al menos una mayúscula'),
                           PatternValidator(r'[0-9]', errorText: 'Debe contener al menos un numero'),
                           PatternValidator(r'[$;._*]', errorText: 'Debe contener un carácter especial (;._*)'),
@@ -285,7 +266,7 @@ class _RegisterState extends State<Register> {
                               Icons.password,
                               color: Colors.grey,
                             ),
-                            errorStyle: TextStyle(fontSize: 18.0),
+                            errorStyle: TextStyle(fontSize: 14.0),
                             border: OutlineInputBorder(
                                 borderSide: BorderSide(color: Colors.red),
                                 borderRadius:
@@ -298,10 +279,12 @@ class _RegisterState extends State<Register> {
                         child: Container(
                           width: MediaQuery.of(context).size.width,
                           height: 50,
-                          child: ElevatedButton(
+                          // NUEVO: Mostramos la ruedita si _isLoading es true
+                          child: _isLoading
+                              ? Center(child: CircularProgressIndicator())
+                              : ElevatedButton(
                             onPressed: () {
                               if (_formkey.currentState!.validate()) {
-                                print('form submitted');
                                 registrarUsuario();
                               }
                             },

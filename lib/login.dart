@@ -20,7 +20,7 @@ class _LoginState extends State<Login> {
   final controladorPassword = TextEditingController();
 
   Future<void> logearUsuario() async {
-    final url = Uri.parse('http://10.1.105.25:8080/api/auth/login');
+    final url = Uri.parse('http://10.1.105.11:8080/api/auth/login');
     final response = await http.post(
       url,
       headers: {"Content-Type": "application/json"},

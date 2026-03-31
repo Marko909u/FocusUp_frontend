@@ -4,6 +4,8 @@ import 'package:focusup/login.dart';
 import 'package:focusup/register.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
+// Notificador global para el tema
+final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.light);
 
 void main() {
   runApp(const MyApp());
@@ -14,20 +16,32 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'Mi App',
-
-
-      localizationsDelegates: const [
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
-      supportedLocales: const [
-        Locale('es', 'ES'),
-      ],
-      home: const MenuPrincipal(),
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: themeNotifier,
+      builder: (_, ThemeMode currentMode, __) {
+        return MaterialApp(
+          debugShowCheckedModeBanner: false,
+          title: 'Mi App',
+          theme: ThemeData(
+            primarySwatch: Colors.blue,
+            brightness: Brightness.light,
+          ),
+          darkTheme: ThemeData(
+            brightness: Brightness.dark,
+            primarySwatch: Colors.blue,
+          ),
+          themeMode: currentMode,
+          localizationsDelegates: const [
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          supportedLocales: const [
+            Locale('es', 'ES'),
+          ],
+          home: const MenuPrincipal(),
+        );
+      },
     );
   }
 }
@@ -52,8 +66,6 @@ class MenuPrincipal extends StatelessWidget {
               fit: BoxFit.contain,
             ),
             const SizedBox(height: 20),
-
-
             const Text(
               'Bienvenido',
               textAlign: TextAlign.center,
@@ -69,8 +81,6 @@ class MenuPrincipal extends StatelessWidget {
               style: TextStyle(color: Colors.grey, fontSize: 16),
             ),
             const SizedBox(height: 50),
-
-
             ElevatedButton(
               onPressed: () {
                 Navigator.push(
@@ -85,10 +95,7 @@ class MenuPrincipal extends StatelessWidget {
               ),
               child: const Text('Registrarse', style: TextStyle(fontSize: 18)),
             ),
-
             const SizedBox(height: 20),
-
-
             OutlinedButton(
               onPressed: () {
                 Navigator.push(
@@ -117,25 +124,10 @@ class MenuPrincipal extends StatelessWidget {
               ),
               child: const Text('pruebas', style: TextStyle(fontSize: 18)),
             ),
-
             const SizedBox(height: 20),
-
           ],
         ),
       ),
-    );
-  }
-}
-
-
-class PaginaLogin extends StatelessWidget {
-  const PaginaLogin({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text("Iniciar Sesión")),
-      body: const Center(child: Text("Pantalla de Login")),
     );
   }
 }
