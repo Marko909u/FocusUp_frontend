@@ -22,14 +22,15 @@ class ApiService {
       InterceptorsWrapper(
         // 1. ANTES DE ENVIAR LA PETICIÓN: Añadimos el Token
         onRequest: (options, handler) async {
-          // No necesitamos token para login o registro
           if (!options.path.contains('/auth/login') && !options.path.contains('/auth/register')) {
             String? token = await TokenStorage.getToken();
             if (token != null) {
-              options.headers['Authorization'] = 'Bearer $token';
+              // LIMPIEZA MÁGICA: Quitamos comillas extra que puedan venir del backend
+              final cleanToken = token.replaceAll('"', '').trim();
+              options.headers['Authorization'] = 'Bearer $cleanToken';
             }
           }
-          return handler.next(options); // Continúa con la petición
+          return handler.next(options);
         },
 
         // 2. SI HAY UN ERROR: Manejamos si el token caduca (Error 401/403)

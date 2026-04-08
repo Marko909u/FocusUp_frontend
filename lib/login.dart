@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
+import 'token_storage.dart'; // <--- AÑADE ESTO
 
 class Login extends StatefulWidget {
   const Login({Key? key}) : super(key: key);
@@ -31,13 +32,21 @@ class _LoginState extends State<Login> {
     );
 
     if (response.statusCode == 200) {
-      final String token = response.body;
+      // 1. Decodificamos el cuerpo de la respuesta
+      final dynamic decodedBody = jsonDecode(response.body);
+      String token;
 
+      // 2. Si es un mapa (JSON), buscamos la clave 'token'. Si es un String directo, lo usamos.
+      if (decodedBody is Map) {
+        token = decodedBody['token'] ?? response.body;
+      } else {
+        token = decodedBody.toString();
+      }
 
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('jwt_token', token);
+      // 3. Guardamos el token ya limpio
+      await TokenStorage.saveToken(token);
 
-      print("¡Login exitoso! Redirigiendo a la pantalla principal...");
+      print("¡Login exitoso! Token limpio guardado.");
 
 
       if (mounted) {
