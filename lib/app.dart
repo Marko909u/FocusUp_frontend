@@ -118,10 +118,19 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> {
                     ),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
-                      children: recs.take(3).map((r) => Container(
-                        width: 5, height: 5, margin: EdgeInsets.symmetric(horizontal: 0.5),
-                        decoration: BoxDecoration(shape: BoxShape.circle, color: r['color']),
-                      )).toList(),
+                      children: recs.take(3).map((r) {
+                        bool esTarea = r['tipo'] == 'tarea';
+                        return Container(
+                          width: 5,
+                          height: 5,
+                          margin: const EdgeInsets.symmetric(horizontal: 0.5),
+                          decoration: BoxDecoration(
+                            shape: esTarea ? BoxShape.rectangle : BoxShape.circle,
+                            color: r['color'],
+                            borderRadius: esTarea ? BorderRadius.circular(1) : null,
+                          ),
+                        );
+                      }).toList(),
                     )
                   ],
                 ),
@@ -133,7 +142,44 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> {
     );
   }
 
-  void _mostrarDialogoRecordatorio() {
+  void _mostrarOpcionesFab() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.notifications, color: Colors.blue),
+                title: const Text('Nuevo Recordatorio'),
+                subtitle: const Text('Se mostrará como un punto en el calendario'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _mostrarDialogoFormulario('recordatorio');
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.task_alt, color: Colors.green),
+                title: const Text('Nueva Tarea'),
+                subtitle: const Text('Se mostrará como un cuadrado en el calendario'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _mostrarDialogoFormulario('tarea');
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _mostrarDialogoFormulario(String tipo) {
     String mensaje = "";
     Color colorSeleccionado = Colors.blue;
     DateTime fechaTemp = _fechaSeleccionada;
@@ -144,7 +190,7 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
-              title: Text('Nuevo Recordatorio'),
+              title: Text(tipo == 'recordatorio' ? 'Nuevo Recordatorio' : 'Nueva Tarea'),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -177,7 +223,11 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> {
                       setState(() {
                         final f = _soloFecha(fechaTemp);
                         if (_recordatorios[f] == null) _recordatorios[f] = [];
-                        _recordatorios[f]!.add({'mensaje': mensaje, 'color': colorSeleccionado});
+                        _recordatorios[f]!.add({
+                          'mensaje': mensaje,
+                          'color': colorSeleccionado,
+                          'tipo': tipo,
+                        });
                       });
                       Navigator.pop(context);
                     }
@@ -276,11 +326,16 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> {
               elevation: 0,
               margin: EdgeInsets.symmetric(vertical: 4),
               child: ListTile(
-                leading: CircleAvatar(backgroundColor: rec['color'], radius: 8),
+                leading: CircleAvatar(
+                  backgroundColor: rec['color'],
+                  radius: 8,
+                  child: rec['tipo'] == 'tarea' ? Container(width: 8, height: 8, decoration: BoxDecoration(color: rec['color'])) : null,
+                ),
                 title: Text(
                     rec['mensaje'],
                     style: TextStyle(fontWeight: FontWeight.w500)
                 ),
+                trailing: Text(rec['tipo'] == 'tarea' ? 'Tarea' : 'Recordatorio', style: const TextStyle(fontSize: 10, fontStyle: FontStyle.italic)),
               ),
             )).toList(),
           ],
@@ -362,7 +417,7 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> {
       appBar: AppBar(title: Text('FocusUp'), automaticallyImplyLeading: false),
       body: [_paginaInicio(), _paginaExplorar(), _paginaTienda(), _paginaPerfil()][_indiceActual],
       floatingActionButton: FloatingActionButton(
-        onPressed: _mostrarDialogoRecordatorio,
+        onPressed: _mostrarOpcionesFab,
         child: const Icon(Icons.add),
         backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
