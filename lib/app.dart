@@ -2,7 +2,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'main.dart';
-import 'settings.dart'; // Importamos la nueva página de configuración
+import 'settings.dart';
+import 'api_service.dart';
+import 'token_storage.dart'; // <--- AÑADE ESTA LÍNEA
 
 class PaginaPrincipal extends StatefulWidget {
   final String nombreUsuario;  const PaginaPrincipal({Key? key, required this.nombreUsuario}) : super(key: key);
@@ -207,7 +209,46 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> {
 
   void _resetearCronometro() {
     _cronometro?.cancel();
-    setState(() { _tiempoTranscurrido = Duration.zero; _cronometroActivo = false; });
+    setState(() {
+      _tiempoTranscurrido = Duration.zero;
+      _cronometroActivo = false;
+    });
+  }
+
+  Future<void> _guardarSesionEnBackend() async {
+    // Calculamos los minutos. Si quieres que cuente a partir de 1 segundo como 1 minuto, usa .inMinutes + 1
+    // Si quieres minutos reales completados, usa .inMinutes.
+    int minutos = _tiempoTranscurrido.inMinutes;
+
+    if (minutos <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Debes estudiar al menos 1 minuto para guardar la sesión.")),
+      );
+      return;
+    }
+
+    try {
+      // Usamos /sessions porque en tu Java el @RequestMapping es /api/sessions
+      // y la baseUrl ya incluye el /api
+      final response = await apiService.post('/sessions', data: {
+        "minuts": minutos,
+      });
+
+      if (response.statusCode == 200) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(response.data.toString())),
+          );
+          _resetearCronometro(); // Limpiamos el cronómetro tras guardar
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error al guardar la sesión: $e")),
+        );
+      }
+    }
   }
 
   String _formatearTiempo(Duration duration) {
@@ -216,8 +257,8 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> {
   }
 
   Future<void> _cerrarSesion() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('jwt_token');
+    // Usamos TokenStorage para que sea consistente con el resto de la app
+    await TokenStorage.deleteToken();
     if (mounted) Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (context) => const MenuPrincipal()), (route) => false);
   }
 
@@ -300,9 +341,35 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              ElevatedButton.icon(onPressed: _alternarCronometro, icon: Icon(_cronometroActivo ? Icons.pause : Icons.play_arrow), label: Text(_cronometroActivo ? 'Parar' : 'Iniciar'), style: ElevatedButton.styleFrom(backgroundColor: _cronometroActivo ? Colors.orange : Colors.green, foregroundColor: Colors.white)),
-              SizedBox(width: 20),
-              ElevatedButton.icon(onPressed: _resetearCronometro, icon: Icon(Icons.refresh), label: Text('Resetear'), style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white)),
+              ElevatedButton.icon(
+                onPressed: _alternarCronometro,
+                icon: Icon(_cronometroActivo ? Icons.pause : Icons.play_arrow),
+                label: Text(_cronometroActivo ? 'Parar' : 'Iniciar'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _cronometroActivo ? Colors.orange : Colors.green,
+                  foregroundColor: Colors.white,
+                ),
+              ),
+              const SizedBox(width: 10),
+              ElevatedButton.icon(
+                onPressed: _guardarSesionEnBackend,
+                icon: const Icon(Icons.save),
+                label: const Text('Finalizar y Guardar'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blueAccent,
+                  foregroundColor: Colors.white,
+                ),
+              ),
+              const SizedBox(width: 10),
+              ElevatedButton.icon(
+                onPressed: _resetearCronometro,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Reset'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.redAccent,
+                  foregroundColor: Colors.white,
+                ),
+              ),
             ],
           ),
         ],
