@@ -1,14 +1,15 @@
 import 'dart:async';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'main.dart';
-import 'settings.dart';
+import 'settings.dart'; // Importamos la nueva página de configuración
 import 'api_service.dart';
-import 'token_storage.dart'; // <--- AÑADE ESTA LÍNEA
+import 'token_storage.dart';
 
 class PaginaPrincipal extends StatefulWidget {
   final String nombreUsuario;  const PaginaPrincipal({Key? key, required this.nombreUsuario}) : super(key: key);
-
+  
   @override
   _PaginaPrincipalState createState() => _PaginaPrincipalState();
 }
@@ -33,6 +34,9 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> {
 
   DateTime _soloFecha(DateTime fecha) => DateTime(fecha.year, fecha.month, fecha.day);
 
+  String _colorToHex(Color color) {
+    return '#${color.value.toRadixString(16).substring(2, 8).toUpperCase()}';
+  }
   @override
   void dispose() {
     _cronometro?.cancel();
@@ -46,7 +50,31 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> {
       _miToken = tokenGuardado ?? "No se encontró ningún token guardado";
     });
   }
+  Future<bool> _guardarEnBackend(String tipo, String mensaje, DateTime fecha) async {
+    // 1. Formato ISO 8601 que espera Spring Boot para LocalDateTime
+    // Ejemplo: 2026-04-09T10:30:00
+    String fechaFormateada = "${fecha.year}-${fecha.month.toString().padLeft(2, '0')}-${fecha.day.toString().padLeft(2, '0')}T00:00:00";
 
+    // 2. Ruta exacta según su @RequestMapping
+    String endpoint = '/recordatoris';
+
+    // 3. El JSON con los nombres exactos de su clase RecordatoriRequest
+    Map<String, dynamic> datos = {
+      "missatge": mensaje,  // Antes tenías "mensaje", ahora "missatge"
+      "dataHora": fechaFormateada, // Antes tenías "fecha", ahora "dataHora"
+    };
+
+    try {
+      print("Enviando datos: $datos");
+      final response = await apiService.post(endpoint, data: datos);
+      print(" ¡ÉXITO! ha respondido con código: ${response.statusCode}");
+      print(" Datos guardados oficialmente: ${response.data}");
+      return true;
+    } on DioException catch (e) {
+      print("Error detallado: ${e.response?.data}");
+      return false;
+    }
+  }
   // --- LÓGICA DEL CALENDARIO PERSONALIZADO ---
   String _nombreMes(int mes) {
     const meses = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
@@ -220,27 +248,61 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> {
               actions: [
                 TextButton(onPressed: () => Navigator.pop(context), child: Text('Cancelar')),
                 ElevatedButton(
-                  onPressed: () {
+                  onPressed: () async {
                     if (mensaje.isNotEmpty) {
-                      setState(() {
-                        final f = _soloFecha(fechaTemp);
-                        if (_recordatorios[f] == null) _recordatorios[f] = [];
-                        _recordatorios[f]!.add({
-                          'mensaje': mensaje,
-                          'color': colorSeleccionado,
-                          'tipo': tipo,
+                      // Llamamos a la función (ya no le pasamos el colorSeleccionado al backend)
+                      bool exito = await _guardarEnBackend(tipo, mensaje, fechaTemp);
+
+                      if (exito) {
+                        setState(() {
+                          final f = _soloFecha(fechaTemp);
+                          if (_recordatorios[f] == null) _recordatorios[f] = [];
+
+                          // El color lo seguimos guardando aquí LOCALMENTE para que tu UI no cambie
+                          _recordatorios[f]!.add({
+                            'mensaje': mensaje,
+                            'color': colorSeleccionado,
+                            'tipo': tipo,
+                            'completada': false,
+                          });
                         });
-                      });
-                      Navigator.pop(context);
+                        Navigator.pop(context);
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Error: No se ha podido guardar el recordatorio')),
+                        );
+                      }
                     }
                   },
-                  child: Text('Guardar'),
+                  child: const Text('Guardar'),
                 ),
               ],
             );
           },
         );
       },
+    );
+  }
+
+  void _confirmarDeshacerTarea(Map<String, dynamic> tarea) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Deshacer tarea"),
+        content: const Text("¿Deseas deshacer la tarea completada?"),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancelar")),
+          TextButton(
+            onPressed: () {
+              setState(() {
+                tarea['completada'] = false;
+              });
+              Navigator.pop(context);
+            },
+            child: const Text("Sí, deshacer"),
+          ),
+        ],
+      ),
     );
   }
 
@@ -374,9 +436,31 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> {
                 ),
                 title: Text(
                     rec['mensaje'],
-                    style: TextStyle(fontWeight: FontWeight.w500)
+                    style: TextStyle(
+                        fontWeight: FontWeight.w500,
+                        decoration: (rec['completada'] ?? false) ? TextDecoration.lineThrough : null,
+                        color: (rec['completada'] ?? false) ? Colors.grey : null,
+                    )
                 ),
-                trailing: Text(rec['tipo'] == 'tarea' ? 'Tarea' : 'Recordatorio', style: const TextStyle(fontSize: 10, fontStyle: FontStyle.italic)),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (rec['tipo'] == 'tarea')
+                      Checkbox(
+                        value: rec['completada'] ?? false,
+                        onChanged: (bool? value) {
+                          if (rec['completada'] == true && value == false) {
+                            _confirmarDeshacerTarea(rec);
+                          } else {
+                            setState(() {
+                              rec['completada'] = value;
+                            });
+                          }
+                        },
+                      ),
+                    Text(rec['tipo'] == 'tarea' ? 'Tarea' : 'Recordatorio', style: const TextStyle(fontSize: 10, fontStyle: FontStyle.italic)),
+                  ],
+                ),
               ),
             )).toList(),
           ],
