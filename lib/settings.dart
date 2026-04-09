@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
-import 'main.dart'; // Importamos el themeNotifier
+import 'package:dio/dio.dart';
+import 'main.dart'; 
+import 'api_service.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({Key? key}) : super(key: key);
@@ -78,34 +80,19 @@ class AccountSettingsPage extends StatelessWidget {
             leading: const Icon(Icons.email_outlined),
             title: const Text('Cambiar correo electrónico'),
             trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const ChangeEmailPage()),
-              );
-            },
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ChangeEmailPage())),
           ),
           ListTile(
             leading: const Icon(Icons.lock_outline),
             title: const Text('Cambiar contraseña'),
             trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const ChangePasswordPage()),
-              );
-            },
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ChangePasswordPage())),
           ),
           ListTile(
             leading: const Icon(Icons.person_outline),
-            title: const Text('Cambiar nombre de usuario'),
+            title: const Text('Cambiar Nombre y Apellidos'),
             trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const ChangeUsernamePage()),
-              );
-            },
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ChangeUsernamePage())),
           ),
         ],
       ),
@@ -113,8 +100,43 @@ class AccountSettingsPage extends StatelessWidget {
   }
 }
 
-class ChangeEmailPage extends StatelessWidget {
+// --- PANTALLA: CAMBIAR EMAIL ---
+class ChangeEmailPage extends StatefulWidget {
   const ChangeEmailPage({Key? key}) : super(key: key);
+
+  @override
+  _ChangeEmailPageState createState() => _ChangeEmailPageState();
+}
+
+class _ChangeEmailPageState extends State<ChangeEmailPage> {
+  final TextEditingController _emailController = TextEditingController();
+  bool _cargando = false;
+
+  Future<void> _actualizarEmail() async {
+    if (_emailController.text.isEmpty) return;
+    
+    setState(() => _cargando = true);
+    try {
+      await apiService.patch('/users/me/email', data: {
+        "email": _emailController.text.trim(),
+      });
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Correo actualizado con éxito"), backgroundColor: Colors.green),
+      );
+      Navigator.pop(context);
+    } on DioException catch (e) {
+      String error = "Error al actualizar el correo";
+      if (e.response?.statusCode == 400) {
+        error = e.response?.data['error'] ?? "Este correo ya está en uso";
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error), backgroundColor: Colors.red),
+      );
+    } finally {
+      setState(() => _cargando = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -124,12 +146,19 @@ class ChangeEmailPage extends StatelessWidget {
         padding: const EdgeInsets.all(20.0),
         child: Column(
           children: [
-            const TextField(decoration: InputDecoration(labelText: 'Nuevo correo electrónico')),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Actualizar Correo'),
+            TextField(
+              controller: _emailController,
+              decoration: const InputDecoration(labelText: 'Nuevo correo electrónico', border: OutlineInputBorder()),
+              keyboardType: TextInputType.emailAddress,
             ),
+            const SizedBox(height: 20),
+            _cargando 
+              ? const CircularProgressIndicator()
+              : ElevatedButton(
+                  onPressed: _actualizarEmail,
+                  style: ElevatedButton.styleFrom(minimumSize: const Size(double.infinity, 50)),
+                  child: const Text('Actualizar Correo'),
+                ),
           ],
         ),
       ),
@@ -137,25 +166,71 @@ class ChangeEmailPage extends StatelessWidget {
   }
 }
 
-class ChangePasswordPage extends StatelessWidget {
+// --- PANTALLA: CAMBIAR CONTRASEÑA ---
+class ChangePasswordPage extends StatefulWidget {
   const ChangePasswordPage({Key? key}) : super(key: key);
+
+  @override
+  _ChangePasswordPageState createState() => _ChangePasswordPageState();
+}
+
+class _ChangePasswordPageState extends State<ChangePasswordPage> {
+  final _actualController = TextEditingController();
+  final _nuevaController = TextEditingController();
+  final _confirmarController = TextEditingController();
+  bool _cargando = false;
+
+  bool _validarPassword(String p) {
+    // 8 caracteres, mayúscula, número y símbolo
+    final regex = RegExp(r'^(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#\$&*~]).{8,}$');
+    return regex.hasMatch(p);
+  }
+
+  Future<void> _actualizarPassword() async {
+    if (_nuevaController.text != _confirmarController.text) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Las contraseñas no coinciden")));
+      return;
+    }
+
+    if (!_validarPassword(_nuevaController.text)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("La contraseña debe tener 8 caracteres, una mayúscula, un número y un símbolo (!@#\$&*~)")),
+      );
+      return;
+    }
+
+    setState(() => _cargando = true);
+    try {
+      await apiService.patch('/users/me/password', data: {
+        "passwordActual": _actualController.text,
+        "passwordNueva": _nuevaController.text,
+      });
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Contraseña actualizada"), backgroundColor: Colors.green));
+      Navigator.pop(context);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Error: Contraseña actual incorrecta"), backgroundColor: Colors.red));
+    } finally {
+      setState(() => _cargando = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Cambiar contraseña')),
-      body: Padding(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(20.0),
         child: Column(
           children: [
-            const TextField(decoration: InputDecoration(labelText: 'Contraseña actual'), obscureText: true),
-            const TextField(decoration: InputDecoration(labelText: 'Nueva contraseña'), obscureText: true),
-            const TextField(decoration: InputDecoration(labelText: 'Confirmar nueva contraseña'), obscureText: true),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Actualizar Contraseña'),
-            ),
+            TextField(controller: _actualController, decoration: const InputDecoration(labelText: 'Contraseña actual'), obscureText: true),
+            const SizedBox(height: 10),
+            TextField(controller: _nuevaController, decoration: const InputDecoration(labelText: 'Nueva contraseña'), obscureText: true),
+            const SizedBox(height: 10),
+            TextField(controller: _confirmarController, decoration: const InputDecoration(labelText: 'Confirmar nueva contraseña'), obscureText: true),
+            const SizedBox(height: 30),
+            _cargando 
+              ? const CircularProgressIndicator()
+              : ElevatedButton(onPressed: _actualizarPassword, child: const Text('Actualizar Contraseña')),
           ],
         ),
       ),
@@ -163,23 +238,50 @@ class ChangePasswordPage extends StatelessWidget {
   }
 }
 
-class ChangeUsernamePage extends StatelessWidget {
+// --- PANTALLA: CAMBIAR NOMBRE/APELLIDOS ---
+class ChangeUsernamePage extends StatefulWidget {
   const ChangeUsernamePage({Key? key}) : super(key: key);
+
+  @override
+  _ChangeUsernamePageState createState() => _ChangeUsernamePageState();
+}
+
+class _ChangeUsernamePageState extends State<ChangeUsernamePage> {
+  final _nomController = TextEditingController();
+  final _cognomsController = TextEditingController();
+  bool _cargando = false;
+
+  Future<void> _actualizarNombre() async {
+    setState(() => _cargando = true);
+    try {
+      await apiService.put('/users/me', data: {
+        "nom": _nomController.text.trim(),
+        "cognoms": _cognomsController.text.trim(),
+      });
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Perfil actualizado"), backgroundColor: Colors.green));
+      Navigator.pop(context);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Error al actualizar perfil"), backgroundColor: Colors.red));
+    } finally {
+      setState(() => _cargando = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Cambiar nombre de usuario')),
+      appBar: AppBar(title: const Text('Cambiar perfil')),
       body: Padding(
         padding: const EdgeInsets.all(20.0),
         child: Column(
           children: [
-            const TextField(decoration: InputDecoration(labelText: 'Nuevo nombre de usuario')),
+            TextField(controller: _nomController, decoration: const InputDecoration(labelText: 'Nombre')),
+            const SizedBox(height: 10),
+            TextField(controller: _cognomsController, decoration: const InputDecoration(labelText: 'Apellidos')),
             const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Actualizar Nombre'),
-            ),
+            _cargando 
+              ? const CircularProgressIndicator()
+              : ElevatedButton(onPressed: _actualizarNombre, child: const Text('Actualizar Perfil')),
           ],
         ),
       ),

@@ -3,12 +3,13 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'main.dart';
-import 'settings.dart'; // Importamos la nueva página de configuración
+import 'settings.dart'; 
 import 'api_service.dart';
 import 'token_storage.dart';
 
 class PaginaPrincipal extends StatefulWidget {
-  final String nombreUsuario;  const PaginaPrincipal({Key? key, required this.nombreUsuario}) : super(key: key);
+  final String nombreUsuario;
+  const PaginaPrincipal({Key? key, required this.nombreUsuario}) : super(key: key);
   
   @override
   _PaginaPrincipalState createState() => _PaginaPrincipalState();
@@ -17,8 +18,12 @@ class PaginaPrincipal extends StatefulWidget {
 class _PaginaPrincipalState extends State<PaginaPrincipal> {
   int _indiceActual = 0;
   String _miToken = "Cargando token...";
-  String _correoUsuario = "usuario@ejemplo.com";
+  String _correoUsuario = "Cargando...";
+  String _nombreReal = "";
+  String _apellidosReal = "";
   DateTime _fechaSeleccionada = DateTime.now();
+  int _puntosUsuario = 0;
+  List<dynamic> _itemsTienda = [];
 
   final Map<DateTime, List<Map<String, dynamic>>> _recordatorios = {};
 
@@ -30,6 +35,135 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> {
   void initState() {
     super.initState();
     _cargarTokenGuardado();
+    _cargarRecordatoriosDesdeBackend(); 
+    _cargarNotasDesdeBackend();
+    _cargarDatosUsuarioYTienda();
+  }
+
+  Future<void> _cargarDatosUsuarioYTienda() async {
+    try {
+      final responseItems = await apiService.get('/botiga');
+      final responseUser = await apiService.get('/users/me');
+
+      setState(() {
+        _itemsTienda = responseItems.data;
+        _puntosUsuario = responseUser.data['punts'] ?? 0;
+        _correoUsuario = responseUser.data['email'] ?? "Sin correo";
+        _nombreReal = responseUser.data['nom'] ?? widget.nombreUsuario;
+        _apellidosReal = responseUser.data['cognoms'] ?? "";
+      });
+    } catch (e) {
+      print("Error al cargar datos del usuario: $e");
+    }
+  }
+
+  Future<void> _cargarNotasDesdeBackend() async {
+    try {
+      final response = await apiService.get('/notas');
+      if (response.statusCode == 200) {
+        final List<dynamic> listaServidor = response.data;
+        setState(() {
+          for (var item in listaServidor) {
+            DateTime fecha = _soloFecha(DateTime.parse(item['data']));
+            if (_recordatorios[fecha] == null) _recordatorios[fecha] = [];
+            _recordatorios[fecha]!.add({
+              'id': item['id'],
+              'mensaje': item['titol'],
+              'contenido': item['contingut'],
+              'tipo': 'nota',
+              'color': Colors.orange, 
+              'completada': false,
+            });
+          }
+        });
+      }
+    } catch (e) {
+      print("Error al obtener notas: $e");
+    }
+  }
+
+  Future<void> _comprarItem(int itemId) async {
+    try {
+      final response = await apiService.post('/botiga/comprar/$itemId');
+
+      if (response.statusCode == 200) {
+        int nuevoSaldo = response.data['nouSaldo'];
+        String mensaje = response.data['mensaje'];
+
+        setState(() {
+          _puntosUsuario = nuevoSaldo;
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(mensaje), backgroundColor: Colors.green),
+        );
+      }
+    } on DioException catch (e) {
+      String mensajeError = "Error en la compra";
+      if (e.response != null && e.response?.statusCode == 400) {
+        mensajeError = e.response?.data['error'] ?? "Puntos insuficientes o item ya comprado";
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(mensajeError), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  Future<void> _cargarRecordatoriosDesdeBackend() async {
+    try {
+      final response = await apiService.get('/recordatoris');
+
+      if (response.statusCode == 200) {
+        final List<dynamic> listaServidor = response.data;
+
+        setState(() {
+          _recordatorios.clear(); 
+          for (var item in listaServidor) {
+            DateTime fechaCompleta = DateTime.parse(item['dataHora']);
+            DateTime fecha = _soloFecha(fechaCompleta);
+
+            if (_recordatorios[fecha] == null) _recordatorios[fecha] = [];
+
+            _recordatorios[fecha]!.add({
+              'id': item['id'], // Guardamos el ID para poder actualizarlo
+              'mensaje': item['missatge'],
+              'tipo': 'tarea',  // Lo tratamos como tarea para que tenga checkbox
+              'color': Colors.blue,   
+              'completada': item['completat'] ?? false, // Estado real del backend
+              'dataHoraOriginal': item['dataHora'], // Para el update
+            });
+          }
+        });
+        print("Recordatorios cargados: ${listaServidor.length}");
+      }
+    } catch (e) {
+      print("Error al obtener recordatorios: $e");
+    }
+  }
+
+  Future<void> _actualizarEstadoEnBackend(Map<String, dynamic> rec, bool nuevoEstado) async {
+    final id = rec['id'];
+    if (id == null) {
+      // Si por alguna razón no hay ID, actualizamos solo la UI
+      setState(() => rec['completada'] = nuevoEstado);
+      return;
+    }
+
+    try {
+      // LLAMADA AL NUEVO ENDPOINT @PatchMapping("/{id}/estat")
+      await apiService.patch('/recordatoris/$id/estat', data: {
+        "completat": nuevoEstado,
+      });
+
+      setState(() {
+        rec['completada'] = nuevoEstado;
+      });
+    } catch (e) {
+      print("Error al actualizar estado: $e");
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("No se pudo sincronizar el estado con el servidor")),
+      );
+    }
   }
 
   DateTime _soloFecha(DateTime fecha) => DateTime(fecha.year, fecha.month, fecha.day);
@@ -37,6 +171,7 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> {
   String _colorToHex(Color color) {
     return '#${color.value.toRadixString(16).substring(2, 8).toUpperCase()}';
   }
+
   @override
   void dispose() {
     _cronometro?.cancel();
@@ -50,32 +185,38 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> {
       _miToken = tokenGuardado ?? "No se encontró ningún token guardado";
     });
   }
-  Future<bool> _guardarEnBackend(String tipo, String mensaje, DateTime fecha) async {
-    // 1. Formato ISO 8601 que espera Spring Boot para LocalDateTime
-    // Ejemplo: 2026-04-09T10:30:00
-    String fechaFormateada = "${fecha.year}-${fecha.month.toString().padLeft(2, '0')}-${fecha.day.toString().padLeft(2, '0')}T00:00:00";
 
-    // 2. Ruta exacta según su @RequestMapping
-    String endpoint = '/recordatoris';
+  Future<dynamic> _guardarEnBackend(String tipo, String mensaje, DateTime fecha, {String? contenido}) async {
+    String fechaSimple = "${fecha.year}-${fecha.month.toString().padLeft(2, '0')}-${fecha.day.toString().padLeft(2, '0')}";
+    String fechaISO = "${fechaSimple}T00:00:00";
+    
+    // Cambiado /notes por /notas segun tu controller
+    String endpoint = tipo == 'nota' ? '/notas' : '/recordatoris';
 
-    // 3. El JSON con los nombres exactos de su clase RecordatoriRequest
-    Map<String, dynamic> datos = {
-      "missatge": mensaje,  // Antes tenías "mensaje", ahora "missatge"
-      "dataHora": fechaFormateada, // Antes tenías "fecha", ahora "dataHora"
-    };
+    Map<String, dynamic> datos;
+    if (tipo == 'nota') {
+      datos = {
+        "titol": mensaje,
+        "contingut": contenido ?? "",
+        "data": fechaSimple, 
+      };
+    } else {
+      datos = {
+        "missatge": mensaje,
+        "dataHora": fechaISO,
+      };
+    }
 
     try {
-      print("Enviando datos: $datos");
+      print("Enviando $tipo a $endpoint: $datos");
       final response = await apiService.post(endpoint, data: datos);
-      print(" ¡ÉXITO! ha respondido con código: ${response.statusCode}");
-      print(" Datos guardados oficialmente: ${response.data}");
-      return true;
+      return response.data;
     } on DioException catch (e) {
-      print("Error detallado: ${e.response?.data}");
-      return false;
+      print("Error guardando $tipo: ${e.response?.data}");
+      return null;
     }
   }
-  // --- LÓGICA DEL CALENDARIO PERSONALIZADO ---
+
   String _nombreMes(int mes) {
     const meses = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
     return meses[mes - 1];
@@ -143,7 +284,7 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> {
                         style: TextStyle(
                             fontSize: 14,
                             fontWeight: seleccionado ? FontWeight.bold : FontWeight.normal,
-                            color: seleccionado ? Colors.blue : null // Resalta el día seleccionado
+                            color: seleccionado ? Colors.blue : null 
                         )
                     ),
                     Row(
@@ -185,18 +326,16 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> {
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
-                leading: const Icon(Icons.notifications, color: Colors.blue),
-                title: const Text('Nuevo Recordatorio'),
-                subtitle: const Text('Se mostrará como un punto en el calendario'),
+                leading: const Icon(Icons.note, color: Colors.orange),
+                title: const Text('Nueva Nota'),
                 onTap: () {
                   Navigator.pop(context);
-                  _mostrarDialogoFormulario('recordatorio');
+                  _mostrarDialogoFormulario('nota');
                 },
               ),
               ListTile(
                 leading: const Icon(Icons.task_alt, color: Colors.green),
-                title: const Text('Nueva Tarea'),
-                subtitle: const Text('Se mostrará como un cuadrado en el calendario'),
+                title: const Text('Nuevo Recordatorio'),
                 onTap: () {
                   Navigator.pop(context);
                   _mostrarDialogoFormulario('tarea');
@@ -210,7 +349,9 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> {
   }
 
   void _mostrarDialogoFormulario(String tipo) {
-    String mensaje = "";
+    String titulo = "";
+    String contenido = "";
+    String mensaje = ""; // Para recordatorios
     Color colorSeleccionado = Colors.blue;
     DateTime fechaTemp = _fechaSeleccionada;
 
@@ -220,57 +361,63 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
-              title: Text(tipo == 'recordatorio' ? 'Nuevo Recordatorio' : 'Nueva Tarea'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  ListTile(
-                    title: Text("Fecha: ${fechaTemp.day}/${fechaTemp.month}/${fechaTemp.year}"),
-                    leading: Icon(Icons.calendar_today),
-                    onTap: () async {
-                      final picked = await showDatePicker(context: context, initialDate: fechaTemp, firstDate: DateTime(2020), lastDate: DateTime(2030));
-                      if (picked != null) setDialogState(() => fechaTemp = picked);
-                    },
-                  ),
-                  TextField(decoration: InputDecoration(labelText: 'Mensaje'), onChanged: (val) => mensaje = val),
-                  SizedBox(height: 20),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [Colors.red, Colors.green, Colors.blue, Colors.orange, Colors.purple].map((color) {
-                      return GestureDetector(
-                        onTap: () => setDialogState(() => colorSeleccionado = color),
-                        child: CircleAvatar(backgroundColor: color, radius: 15, child: colorSeleccionado == color ? Icon(Icons.check, size: 16, color: Colors.white) : null),
-                      );
-                    }).toList(),
-                  ),
-                ],
+              title: Text(tipo == 'nota' ? 'Nueva Nota' : 'Nuevo Recordatorio'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ListTile(
+                      title: Text("Fecha: ${fechaTemp.day}/${fechaTemp.month}/${fechaTemp.year}"),
+                      leading: Icon(Icons.calendar_today),
+                      onTap: () async {
+                        final picked = await showDatePicker(context: context, initialDate: fechaTemp, firstDate: DateTime(2020), lastDate: DateTime(2030));
+                        if (picked != null) setDialogState(() => fechaTemp = picked);
+                      },
+                    ),
+                    if (tipo == 'nota') ...[
+                      TextField(decoration: InputDecoration(labelText: 'Título'), onChanged: (val) => titulo = val),
+                      TextField(decoration: InputDecoration(labelText: 'Contenido'), maxLines: 3, onChanged: (val) => contenido = val),
+                    ] else ...[
+                      TextField(decoration: InputDecoration(labelText: 'Mensaje del recordatorio'), onChanged: (val) => mensaje = val),
+                    ],
+                    SizedBox(height: 20),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [Colors.red, Colors.green, Colors.blue, Colors.orange, Colors.purple].map((color) {
+                        return GestureDetector(
+                          onTap: () => setDialogState(() => colorSeleccionado = color),
+                          child: CircleAvatar(backgroundColor: color, radius: 15, child: colorSeleccionado == color ? Icon(Icons.check, size: 16, color: Colors.white) : null),
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                ),
               ),
               actions: [
                 TextButton(onPressed: () => Navigator.pop(context), child: Text('Cancelar')),
                 ElevatedButton(
                   onPressed: () async {
-                    if (mensaje.isNotEmpty) {
-                      // Llamamos a la función (ya no le pasamos el colorSeleccionado al backend)
-                      bool exito = await _guardarEnBackend(tipo, mensaje, fechaTemp);
-
-                      if (exito) {
+                    if (tipo == 'nota' ? (titulo.isNotEmpty) : (mensaje.isNotEmpty)) {
+                      final resultado = await _guardarEnBackend(tipo, tipo == 'nota' ? titulo : mensaje, fechaTemp, contenido: contenido);
+                      if (resultado != null) {
                         setState(() {
                           final f = _soloFecha(fechaTemp);
                           if (_recordatorios[f] == null) _recordatorios[f] = [];
-
-                          // El color lo seguimos guardando aquí LOCALMENTE para que tu UI no cambie
+                          
+                          // Si es una nota, el resultado es un String, si es tarea es un Map
+                          final bool esMap = resultado is Map;
+                          
                           _recordatorios[f]!.add({
-                            'mensaje': mensaje,
+                            'id': esMap ? resultado['id'] : null,
+                            'mensaje': tipo == 'nota' ? titulo : mensaje,
+                            'contenido': contenido,
                             'color': colorSeleccionado,
                             'tipo': tipo,
                             'completada': false,
+                            'dataHoraOriginal': esMap ? (resultado['dataHora'] ?? resultado['data']) : null,
                           });
                         });
                         Navigator.pop(context);
-                      } else {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Error: No se ha podido guardar el recordatorio')),
-                        );
                       }
                     }
                   },
@@ -294,9 +441,7 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> {
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancelar")),
           TextButton(
             onPressed: () {
-              setState(() {
-                tarea['completada'] = false;
-              });
+              setState(() => tarea['completada'] = false);
               Navigator.pop(context);
             },
             child: const Text("Sí, deshacer"),
@@ -306,7 +451,6 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> {
     );
   }
 
-  // --- MÉTODOS DE LAS OTRAS PÁGINAS (Cronómetro, Perfil, etc) ---
   void _alternarCronometro() {
     if (_cronometroActivo) {
       _cronometro?.cancel();
@@ -328,38 +472,20 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> {
   }
 
   Future<void> _guardarSesionEnBackend() async {
-    // Calculamos los minutos. Si quieres que cuente a partir de 1 segundo como 1 minuto, usa .inMinutes + 1
-    // Si quieres minutos reales completados, usa .inMinutes.
     int minutos = _tiempoTranscurrido.inMinutes;
-
     if (minutos <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Debes estudiar al menos 1 minuto para guardar la sesión.")),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Debes estudiar al menos 1 minuto")));
       return;
     }
-
     try {
-      // Usamos /sessions porque en tu Java el @RequestMapping es /api/sessions
-      // y la baseUrl ya incluye el /api
-      final response = await apiService.post('/sessions', data: {
-        "minuts": minutos,
-      });
-
+      final response = await apiService.post('/sessions', data: {"minuts": minutos});
       if (response.statusCode == 200) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(response.data.toString())),
-          );
-          _resetearCronometro(); // Limpiamos el cronómetro tras guardar
-        }
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(response.data.toString())));
+        _resetearCronometro();
+        _cargarDatosUsuarioYTienda(); // Refrescamos puntos tras estudiar
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Error al guardar la sesión: $e")),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
     }
   }
 
@@ -369,7 +495,6 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> {
   }
 
   Future<void> _cerrarSesion() async {
-    // Usamos TokenStorage para que sea consistente con el resto de la app
     await TokenStorage.deleteToken();
     if (mounted) Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (context) => const MenuPrincipal()), (route) => false);
   }
@@ -384,81 +509,60 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> {
         padding: const EdgeInsets.all(20.0),
         child: Column(
           children: [
-            Text(
-                '¡Bienvenido, ${widget.nombreUsuario}!',
-                style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: isDark ? Colors.blue[200] : Colors.blueAccent
-                )
-            ),
+            Text('¡Bienvenido, ${_nombreReal.isNotEmpty ? _nombreReal : widget.nombreUsuario}!', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: isDark ? Colors.blue[200] : Colors.blueAccent)),
             SizedBox(height: 20),
             Container(
               width: 300,
               padding: EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: Theme.of(context).cardColor, // Se adapta al modo oscuro
+                color: Theme.of(context).cardColor,
                 borderRadius: BorderRadius.circular(15),
-                boxShadow: [
-                  BoxShadow(
-                      color: isDark ? Colors.black54 : Colors.black12,
-                      blurRadius: 10
-                  )
-                ],
-                border: Border.all(
-                    color: isDark ? Colors.blueGrey[800]! : Colors.blue[100]!
-                ),
+                boxShadow: [BoxShadow(color: isDark ? Colors.black54 : Colors.black12, blurRadius: 10)],
+                border: Border.all(color: isDark ? Colors.blueGrey[800]! : Colors.blue[100]!),
               ),
               child: _calendarioPersonalizado(),
             ),
             SizedBox(height: 20),
-            Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                    "Tareas del día:",
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)
-                )
-            ),
-            if (listaHoy.isEmpty)
-              Padding(
-                  padding: EdgeInsets.all(20),
-                  child: Text("Ningún recordatorio", style: TextStyle(color: Colors.grey))
-              ),
+            Align(alignment: Alignment.centerLeft, child: Text("Tareas del día:", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18))),
+            if (listaHoy.isEmpty) Padding(padding: EdgeInsets.all(20), child: Text("Ningún recordatorio", style: TextStyle(color: Colors.grey))),
             ...listaHoy.map((rec) => Card(
               color: (rec['color'] as Color).withOpacity(0.15),
               elevation: 0,
               margin: EdgeInsets.symmetric(vertical: 4),
               child: ListTile(
                 leading: CircleAvatar(
-                  backgroundColor: rec['color'],
-                  radius: 8,
-                  child: rec['tipo'] == 'tarea' ? Container(width: 8, height: 8, decoration: BoxDecoration(color: rec['color'])) : null,
+                  backgroundColor: rec['color'], 
+                  radius: 8, 
+                  child: rec['tipo'] == 'tarea' ? Container(width: 8, height: 8, decoration: BoxDecoration(color: rec['color'])) : null
                 ),
                 title: Text(
-                    rec['mensaje'],
-                    style: TextStyle(
-                        fontWeight: FontWeight.w500,
-                        decoration: (rec['completada'] ?? false) ? TextDecoration.lineThrough : null,
-                        color: (rec['completada'] ?? false) ? Colors.grey : null,
-                    )
+                  rec['mensaje'], 
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold, 
+                    decoration: (rec['completada'] ?? false) ? TextDecoration.lineThrough : null,
+                    color: (rec['completada'] ?? false) ? Colors.grey : null
+                  )
                 ),
+                subtitle: rec['tipo'] == 'nota' && rec['contenido'] != null ? Text(rec['contenido']) : null,
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     if (rec['tipo'] == 'tarea')
                       Checkbox(
                         value: rec['completada'] ?? false,
-                        onChanged: (bool? value) {
-                          if (rec['completada'] == true && value == false) {
-                            _confirmarDeshacerTarea(rec);
-                          } else {
-                            setState(() {
-                              rec['completada'] = value;
-                            });
-                          }
-                        },
+                        // Si ya esta completada, desactivamos el checkbox (onChanged: null)
+                        onChanged: (rec['completada'] ?? false) 
+                          ? null 
+                          : (bool? value) {
+                            if (value != null && value == true) {
+                              _actualizarEstadoEnBackend(rec, true);
+                            }
+                          },
                       ),
-                    Text(rec['tipo'] == 'tarea' ? 'Tarea' : 'Recordatorio', style: const TextStyle(fontSize: 10, fontStyle: FontStyle.italic)),
+                    Text(
+                      rec['tipo'] == 'tarea' ? 'Recordatorio' : 'Nota', 
+                      style: const TextStyle(fontSize: 10, fontStyle: FontStyle.italic)
+                    ),
                   ],
                 ),
               ),
@@ -480,35 +584,11 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              ElevatedButton.icon(
-                onPressed: _alternarCronometro,
-                icon: Icon(_cronometroActivo ? Icons.pause : Icons.play_arrow),
-                label: Text(_cronometroActivo ? 'Parar' : 'Iniciar'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _cronometroActivo ? Colors.orange : Colors.green,
-                  foregroundColor: Colors.white,
-                ),
-              ),
+              ElevatedButton.icon(onPressed: _alternarCronometro, icon: Icon(_cronometroActivo ? Icons.pause : Icons.play_arrow), label: Text(_cronometroActivo ? 'Parar' : 'Iniciar'), style: ElevatedButton.styleFrom(backgroundColor: _cronometroActivo ? Colors.orange : Colors.green, foregroundColor: Colors.white)),
               const SizedBox(width: 10),
-              ElevatedButton.icon(
-                onPressed: _guardarSesionEnBackend,
-                icon: const Icon(Icons.save),
-                label: const Text('Finalizar y Guardar'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blueAccent,
-                  foregroundColor: Colors.white,
-                ),
-              ),
+              ElevatedButton.icon(onPressed: _guardarSesionEnBackend, icon: const Icon(Icons.save), label: const Text('Finalizar'), style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent, foregroundColor: Colors.white)),
               const SizedBox(width: 10),
-              ElevatedButton.icon(
-                onPressed: _resetearCronometro,
-                icon: const Icon(Icons.refresh),
-                label: const Text('Reset'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.redAccent,
-                  foregroundColor: Colors.white,
-                ),
-              ),
+              ElevatedButton.icon(onPressed: _resetearCronometro, icon: const Icon(Icons.refresh), label: const Text('Reset'), style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white)),
             ],
           ),
         ],
@@ -517,11 +597,79 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> {
   }
 
   Widget _paginaTienda() {
-    return const Center(
-      child: Text(
-        'Tienda',
-        style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-      ),
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Column(
+      children: [
+        // Cabecera de Puntos
+        Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(colors: [Colors.blueAccent, Colors.blue[800]!]),
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [BoxShadow(color: Colors.blue.withOpacity(0.3), blurRadius: 10)],
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text("Tus Puntos:", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                Row(
+                  children: [
+                    const Icon(Icons.stars, color: Colors.amber, size: 28),
+                    const SizedBox(width: 8),
+                    Text("$_puntosUsuario", style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        
+        // Grid de Items
+        Expanded(
+          child: _itemsTienda.isEmpty 
+            ? const Center(child: CircularProgressIndicator())
+            : GridView.builder(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  childAspectRatio: 0.75,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
+                ),
+                itemCount: _itemsTienda.length,
+                itemBuilder: (context, index) {
+                  final item = _itemsTienda[index];
+                  return Card(
+                    elevation: 4,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.redeem, size: 50, color: Colors.blue[300]),
+                        const SizedBox(height: 10),
+                        Text(item['nom'] ?? 'Objeto', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                        const SizedBox(height: 4),
+                        Text("${item['preu']} pts", style: TextStyle(color: Colors.blue[700], fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 12),
+                        ElevatedButton(
+                          onPressed: () => _comprarItem(item['id']),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blueAccent,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          child: const Text("Comprar"),
+                        )
+                      ],
+                    ),
+                  );
+                },
+              ),
+        ),
+      ],
     );
   }
 
@@ -533,24 +681,15 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> {
           children: [
             CircleAvatar(radius: 60, backgroundColor: Colors.blue[100], child: Icon(Icons.person, size: 80, color: Colors.blue)),
             SizedBox(height: 20),
-            Text(widget.nombreUsuario, style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold)),
+            Text("$_nombreReal $_apellidosReal".trim().isNotEmpty ? "$_nombreReal $_apellidosReal" : widget.nombreUsuario, 
+                 style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold)),
             Text(_correoUsuario, style: TextStyle(fontSize: 16, color: Colors.grey[600])),
             SizedBox(height: 40),
             Card(
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
               child: Column(
                 children: [
-                  ListTile(
-                    leading: Icon(Icons.settings, color: Colors.blue),
-                    title: Text('Configuración'),
-                    trailing: Icon(Icons.arrow_forward_ios, size: 16),
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => const SettingsPage()),
-                      );
-                    },
-                  ),
+                  ListTile(leading: Icon(Icons.settings, color: Colors.blue), title: Text('Configuración'), trailing: Icon(Icons.arrow_forward_ios, size: 16), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsPage()))),
                   Divider(height: 1),
                   ListTile(leading: Icon(Icons.logout, color: Colors.red), title: Text('Cerrar Sesión', style: TextStyle(color: Colors.red)), onTap: _cerrarSesion),
                 ],
@@ -567,19 +706,10 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> {
     return Scaffold(
       appBar: AppBar(title: Text('FocusUp'), automaticallyImplyLeading: false),
       body: [_paginaInicio(), _paginaExplorar(), _paginaTienda(), _paginaPerfil()][_indiceActual],
-      floatingActionButton: FloatingActionButton(
-        onPressed: _mostrarOpcionesFab,
-        child: const Icon(Icons.add),
-        backgroundColor: Colors.blue,
-        foregroundColor: Colors.white,
-      ),
+      floatingActionButton: FloatingActionButton(onPressed: _mostrarOpcionesFab, child: const Icon(Icons.add), backgroundColor: Colors.blue, foregroundColor: Colors.white),
       bottomNavigationBar: BottomNavigationBar(
-        backgroundColor: Colors.blue,
-        selectedItemColor: Colors.white,
-        unselectedItemColor: Colors.blue[100],
-        type: BottomNavigationBarType.fixed, // Asegura que se vean todos los nombres
-        currentIndex: _indiceActual,
-        onTap: (index) => setState(() => _indiceActual = index),
+        backgroundColor: Colors.blue, selectedItemColor: Colors.white, unselectedItemColor: Colors.blue[100], type: BottomNavigationBarType.fixed,
+        currentIndex: _indiceActual, onTap: (index) => setState(() => _indiceActual = index),
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Inicio'),
           BottomNavigationBarItem(icon: Icon(Icons.alarm), label: 'Cronómetro'),
