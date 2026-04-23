@@ -67,7 +67,7 @@ class MenuPrincipal extends StatelessWidget {
             ),
             const SizedBox(height: 20),
             const Text(
-              'Bienvenido',
+              'Bienvenido/a',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 32,
@@ -114,7 +114,10 @@ class MenuPrincipal extends StatelessWidget {
               onPressed: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => const PaginaPrincipal(nombreUsuario: 'pruebas',)),
+                  MaterialPageRoute(builder: (context) => const PaginaPrincipal(
+                    nombreUsuario: 'pruebas',
+                    correoUsuario: 'pruebas@focusup.com', // <--- Corregido: añadimos el parámetro faltante
+                  )),
                 );
               },
               style: ElevatedButton.styleFrom(

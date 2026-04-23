@@ -35,10 +35,14 @@ class _LoginState extends State<Login> {
       // 1. Decodificamos el cuerpo de la respuesta
       final dynamic decodedBody = jsonDecode(response.body);
       String token;
+      String email = controladorUsuario.text; // Valor por defecto (el username suele ser el email)
 
-      // 2. Si es un mapa (JSON), buscamos la clave 'token'. Si es un String directo, lo usamos.
+      // 2. Si es un mapa (JSON), buscamos la clave 'token' y 'email' si existe
       if (decodedBody is Map) {
         token = decodedBody['token'] ?? response.body;
+        if (decodedBody.containsKey('email')) {
+          email = decodedBody['email'];
+        }
       } else {
         token = decodedBody.toString();
       }
@@ -55,12 +59,18 @@ class _LoginState extends State<Login> {
           MaterialPageRoute(
             builder: (context) => PaginaPrincipal(
               nombreUsuario: controladorUsuario.text,
+              correoUsuario: email, // <--- Corregido: pasamos el correo
             ),
           ),
         );
       }
     } else {
       print("Credenciales incorrectas (Error ${response.statusCode})");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Usuario o contraseña incorrectos")),
+        );
+      }
     }
   }
   @override
@@ -83,6 +93,7 @@ class _LoginState extends State<Login> {
                     child: Container(
                       width: 200,
                       height: 150,
+                      child: const Icon(Icons.lock_person, size: 100, color: Colors.blue),
                     ),
                   ),
                 ),
@@ -92,13 +103,13 @@ class _LoginState extends State<Login> {
                     controller: controladorUsuario,
                     keyboardType: TextInputType.emailAddress,
                     validator: MultiValidator([
-                      RequiredValidator(errorText: 'Introduzca su nombre de usuario'),
+                      RequiredValidator(errorText: 'Introduzca su nombre de usuario o correo'),
                       MinLengthValidator(3,
-                          errorText: 'Minimum 3 charecter filled name'),
+                          errorText: 'El nombre debe tener al menos 3 caracteres'),
                     ]),
                     decoration: const InputDecoration(
-                      hintText: 'Introduzca su nombre de usuario',
-                      labelText: 'Usuario',
+                      hintText: 'Introduzca su correo electrónico',
+                      labelText: 'Usuario / Email',
                       prefixIcon: Icon(
                         Icons.person,
                         color: Colors.blue,
@@ -149,7 +160,6 @@ class _LoginState extends State<Login> {
                           if (_formkey.currentState!.validate()) {
                             print('Login form submitted');
                             logearUsuario();
-                            // poner lógica de autenticación
                           }
                         },
                         style: ElevatedButton.styleFrom(

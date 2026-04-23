@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -9,20 +10,28 @@ import 'token_storage.dart';
 
 class PaginaPrincipal extends StatefulWidget {
   final String nombreUsuario;
-  const PaginaPrincipal({Key? key, required this.nombreUsuario}) : super(key: key);
+  final String correoUsuario;
+
+  const PaginaPrincipal({
+    Key? key, 
+    required this.nombreUsuario,
+    required this.correoUsuario,
+  }) : super(key: key);
   
   @override
   _PaginaPrincipalState createState() => _PaginaPrincipalState();
 }
 
-class _PaginaPrincipalState extends State<PaginaPrincipal> {
+class _PaginaPrincipalState extends State<PaginaPrincipal> with SingleTickerProviderStateMixin {
   int _indiceActual = 0;
   String _miToken = "Cargando token...";
-  String _correoUsuario = "Cargando...";
+  late String _correoUsuario;
   String _nombreReal = "";
   String _apellidosReal = "";
   DateTime _fechaSeleccionada = DateTime.now();
   int _puntosUsuario = 0;
+  int _rachaActual = 0;
+  int? _selectedRecordatoriId; // Tarea seleccionada para el cronómetro
   List<dynamic> _itemsTienda = [];
 
   final Map<DateTime, List<Map<String, dynamic>>> _recordatorios = {};
@@ -30,14 +39,20 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> {
   Timer? _cronometro;
   Duration _tiempoTranscurrido = Duration.zero;
   bool _cronometroActivo = false;
+  late AnimationController _animationController;
 
   @override
   void initState() {
     super.initState();
+    _correoUsuario = widget.correoUsuario;
     _cargarTokenGuardado();
     _cargarRecordatoriosDesdeBackend(); 
     _cargarNotasDesdeBackend();
     _cargarDatosUsuarioYTienda();
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 1),
+    );
   }
 
   Future<void> _cargarDatosUsuarioYTienda() async {
@@ -48,9 +63,10 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> {
       setState(() {
         _itemsTienda = responseItems.data;
         _puntosUsuario = responseUser.data['punts'] ?? 0;
-        _correoUsuario = responseUser.data['email'] ?? "Sin correo";
+        _correoUsuario = responseUser.data['email'] ?? widget.correoUsuario;
         _nombreReal = responseUser.data['nom'] ?? widget.nombreUsuario;
         _apellidosReal = responseUser.data['cognoms'] ?? "";
+        _rachaActual = responseUser.data['racha'] ?? 0;
       });
     } catch (e) {
       print("Error al cargar datos del usuario: $e");
@@ -125,16 +141,15 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> {
             if (_recordatorios[fecha] == null) _recordatorios[fecha] = [];
 
             _recordatorios[fecha]!.add({
-              'id': item['id'], // Guardamos el ID para poder actualizarlo
+              'id': item['id'], 
               'mensaje': item['missatge'],
-              'tipo': 'tarea',  // Lo tratamos como tarea para que tenga checkbox
+              'tipo': 'tarea',  
               'color': Colors.blue,   
-              'completada': item['completat'] ?? false, // Estado real del backend
-              'dataHoraOriginal': item['dataHora'], // Para el update
+              'completada': item['completat'] ?? false, 
+              'dataHoraOriginal': item['dataHora'], 
             });
           }
         });
-        print("Recordatorios cargados: ${listaServidor.length}");
       }
     } catch (e) {
       print("Error al obtener recordatorios: $e");
@@ -144,13 +159,11 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> {
   Future<void> _actualizarEstadoEnBackend(Map<String, dynamic> rec, bool nuevoEstado) async {
     final id = rec['id'];
     if (id == null) {
-      // Si por alguna razón no hay ID, actualizamos solo la UI
       setState(() => rec['completada'] = nuevoEstado);
       return;
     }
 
     try {
-      // LLAMADA AL NUEVO ENDPOINT @PatchMapping("/{id}/estat")
       await apiService.patch('/recordatoris/$id/estat', data: {
         "completat": nuevoEstado,
       });
@@ -161,20 +174,17 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> {
     } catch (e) {
       print("Error al actualizar estado: $e");
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("No se pudo sincronizar el estado con el servidor")),
+        const SnackBar(content: Text("No se pudo sincronizar el estado")),
       );
     }
   }
 
   DateTime _soloFecha(DateTime fecha) => DateTime(fecha.year, fecha.month, fecha.day);
 
-  String _colorToHex(Color color) {
-    return '#${color.value.toRadixString(16).substring(2, 8).toUpperCase()}';
-  }
-
   @override
   void dispose() {
     _cronometro?.cancel();
+    _animationController.dispose();
     super.dispose();
   }
 
@@ -182,7 +192,7 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> {
     final prefs = await SharedPreferences.getInstance();
     String? tokenGuardado = prefs.getString('jwt_token');
     setState(() {
-      _miToken = tokenGuardado ?? "No se encontró ningún token guardado";
+      _miToken = tokenGuardado ?? "No se encontró ningún token";
     });
   }
 
@@ -190,7 +200,6 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> {
     String fechaSimple = "${fecha.year}-${fecha.month.toString().padLeft(2, '0')}-${fecha.day.toString().padLeft(2, '0')}";
     String fechaISO = "${fechaSimple}T00:00:00";
     
-    // Cambiado /notes por /notas segun tu controller
     String endpoint = tipo == 'nota' ? '/notas' : '/recordatoris';
 
     Map<String, dynamic> datos;
@@ -208,7 +217,6 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> {
     }
 
     try {
-      print("Enviando $tipo a $endpoint: $datos");
       final response = await apiService.post(endpoint, data: datos);
       return response.data;
     } on DioException catch (e) {
@@ -234,15 +242,15 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             IconButton(
-                icon: Icon(Icons.chevron_left, color: Colors.blue),
+                icon: const Icon(Icons.chevron_left, color: Colors.blue),
                 onPressed: () => setState(() => _fechaSeleccionada = DateTime(_fechaSeleccionada.year, _fechaSeleccionada.month - 1, 1))
             ),
             Text(
                 "${_nombreMes(_fechaSeleccionada.month)} ${_fechaSeleccionada.year}",
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)
             ),
             IconButton(
-                icon: Icon(Icons.chevron_right, color: Colors.blue),
+                icon: const Icon(Icons.chevron_right, color: Colors.blue),
                 onPressed: () => setState(() => _fechaSeleccionada = DateTime(_fechaSeleccionada.year, _fechaSeleccionada.month + 1, 1))
             ),
           ],
@@ -250,16 +258,16 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: ["L", "M", "X", "J", "V", "S", "D"]
-              .map((d) => Text(d, style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold, fontSize: 12)))
+              .map((d) => Text(d, style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold, fontSize: 12)))
               .toList(),
         ),
         GridView.builder(
           shrinkWrap: true,
-          physics: NeverScrollableScrollPhysics(),
+          physics: const NeverScrollableScrollPhysics(),
           itemCount: diasEnMes + desfase,
-          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 7),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 7),
           itemBuilder: (context, index) {
-            if (index < desfase) return SizedBox();
+            if (index < desfase) return const SizedBox();
             int dia = index - desfase + 1;
             DateTime fechaDia = DateTime(_fechaSeleccionada.year, _fechaSeleccionada.month, dia);
             bool seleccionado = _soloFecha(_fechaSeleccionada) == _soloFecha(fechaDia);
@@ -268,7 +276,7 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> {
             return GestureDetector(
               onTap: () => setState(() => _fechaSeleccionada = fechaDia),
               child: Container(
-                margin: EdgeInsets.all(2),
+                margin: const EdgeInsets.all(2),
                 decoration: BoxDecoration(
                   color: seleccionado
                       ? (isDark ? Colors.blue[900]!.withOpacity(0.5) : Colors.blue[100])
@@ -284,7 +292,7 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> {
                         style: TextStyle(
                             fontSize: 14,
                             fontWeight: seleccionado ? FontWeight.bold : FontWeight.normal,
-                            color: seleccionado ? Colors.blue : null 
+                            color: seleccionado ? Colors.blue : null
                         )
                     ),
                     Row(
@@ -326,7 +334,7 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> {
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
-                leading: const Icon(Icons.note, color: Colors.orange),
+                leading: const Icon(Icons.note_add, color: Colors.orange),
                 title: const Text('Nueva Nota'),
                 onTap: () {
                   Navigator.pop(context);
@@ -351,7 +359,7 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> {
   void _mostrarDialogoFormulario(String tipo) {
     String titulo = "";
     String contenido = "";
-    String mensaje = ""; // Para recordatorios
+    String mensaje = ""; 
     Color colorSeleccionado = Colors.blue;
     DateTime fechaTemp = _fechaSeleccionada;
 
@@ -368,25 +376,25 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> {
                   children: [
                     ListTile(
                       title: Text("Fecha: ${fechaTemp.day}/${fechaTemp.month}/${fechaTemp.year}"),
-                      leading: Icon(Icons.calendar_today),
+                      leading: const Icon(Icons.calendar_today),
                       onTap: () async {
                         final picked = await showDatePicker(context: context, initialDate: fechaTemp, firstDate: DateTime(2020), lastDate: DateTime(2030));
                         if (picked != null) setDialogState(() => fechaTemp = picked);
                       },
                     ),
                     if (tipo == 'nota') ...[
-                      TextField(decoration: InputDecoration(labelText: 'Título'), onChanged: (val) => titulo = val),
-                      TextField(decoration: InputDecoration(labelText: 'Contenido'), maxLines: 3, onChanged: (val) => contenido = val),
+                      TextField(decoration: const InputDecoration(labelText: 'Título'), onChanged: (val) => titulo = val),
+                      TextField(decoration: const InputDecoration(labelText: 'Contenido'), maxLines: 3, onChanged: (val) => contenido = val),
                     ] else ...[
-                      TextField(decoration: InputDecoration(labelText: 'Mensaje del recordatorio'), onChanged: (val) => mensaje = val),
+                      TextField(decoration: const InputDecoration(labelText: 'Mensaje del recordatorio'), onChanged: (val) => mensaje = val),
                     ],
-                    SizedBox(height: 20),
+                    const SizedBox(height: 20),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [Colors.red, Colors.green, Colors.blue, Colors.orange, Colors.purple].map((color) {
                         return GestureDetector(
                           onTap: () => setDialogState(() => colorSeleccionado = color),
-                          child: CircleAvatar(backgroundColor: color, radius: 15, child: colorSeleccionado == color ? Icon(Icons.check, size: 16, color: Colors.white) : null),
+                          child: CircleAvatar(backgroundColor: color, radius: 15, child: colorSeleccionado == color ? const Icon(Icons.check, size: 16, color: Colors.white) : null),
                         );
                       }).toList(),
                     ),
@@ -394,7 +402,7 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> {
                 ),
               ),
               actions: [
-                TextButton(onPressed: () => Navigator.pop(context), child: Text('Cancelar')),
+                TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancelar')),
                 ElevatedButton(
                   onPressed: () async {
                     if (tipo == 'nota' ? (titulo.isNotEmpty) : (mensaje.isNotEmpty)) {
@@ -403,10 +411,7 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> {
                         setState(() {
                           final f = _soloFecha(fechaTemp);
                           if (_recordatorios[f] == null) _recordatorios[f] = [];
-                          
-                          // Si es una nota, el resultado es un String, si es tarea es un Map
                           final bool esMap = resultado is Map;
-                          
                           _recordatorios[f]!.add({
                             'id': esMap ? resultado['id'] : null,
                             'mensaje': tipo == 'nota' ? titulo : mensaje,
@@ -454,35 +459,61 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> {
   void _alternarCronometro() {
     if (_cronometroActivo) {
       _cronometro?.cancel();
+      _animationController.stop();
       setState(() => _cronometroActivo = false);
     } else {
       setState(() => _cronometroActivo = true);
-      _cronometro = Timer.periodic(Duration(seconds: 1), (timer) {
-        setState(() => _tiempoTranscurrido += Duration(seconds: 1));
+      _animationController.repeat();
+      _cronometro = Timer.periodic(const Duration(seconds: 1), (timer) {
+        setState(() => _tiempoTranscurrido += const Duration(seconds: 1));
       });
     }
   }
 
   void _resetearCronometro() {
     _cronometro?.cancel();
+    _animationController.stop();
+    _animationController.value = 0;
     setState(() {
       _tiempoTranscurrido = Duration.zero;
       _cronometroActivo = false;
+      _selectedRecordatoriId = null; // Limpiamos selección al resetear
     });
   }
 
   Future<void> _guardarSesionEnBackend() async {
     int minutos = _tiempoTranscurrido.inMinutes;
     if (minutos <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Debes estudiar al menos 1 minuto")));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Mínimo 1 minuto")));
       return;
     }
+
     try {
-      final response = await apiService.post('/sessions', data: {"minuts": minutos});
+      final data = {
+        "minuts": minutos,
+        if (_selectedRecordatoriId != null) "recordatoriId": _selectedRecordatoriId,
+      };
+
+      final response = await apiService.post('/sessions', data: data);
+      
       if (response.statusCode == 200) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(response.data.toString())));
+        final puntosGanados = response.data['puntosGanados'] ?? 0;
+        final nuevoSaldo = response.data['nuevoSaldo'] ?? _puntosUsuario;
+
+        setState(() {
+          _puntosUsuario = nuevoSaldo;
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("¡Éxito! Ganaste $puntosGanados puntos. Nuevo saldo: $nuevoSaldo"),
+            backgroundColor: Colors.green,
+          ),
+        );
+        
         _resetearCronometro();
-        _cargarDatosUsuarioYTienda(); // Refrescamos puntos tras estudiar
+        _cargarRecordatoriosDesdeBackend(); // Refrescamos por si se completó la tarea
+        _cargarDatosUsuarioYTienda(); 
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
@@ -509,11 +540,11 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> {
         padding: const EdgeInsets.all(20.0),
         child: Column(
           children: [
-            Text('¡Bienvenido, ${_nombreReal.isNotEmpty ? _nombreReal : widget.nombreUsuario}!', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: isDark ? Colors.blue[200] : Colors.blueAccent)),
-            SizedBox(height: 20),
+            Text('¡Bienvenido/a, ${_nombreReal.isNotEmpty ? _nombreReal : widget.nombreUsuario}!', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: isDark ? Colors.blue[200] : Colors.blueAccent)),
+            const SizedBox(height: 20),
             Container(
               width: 300,
-              padding: EdgeInsets.all(10),
+              padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
                 color: Theme.of(context).cardColor,
                 borderRadius: BorderRadius.circular(15),
@@ -522,13 +553,13 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> {
               ),
               child: _calendarioPersonalizado(),
             ),
-            SizedBox(height: 20),
-            Align(alignment: Alignment.centerLeft, child: Text("Tareas del día:", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18))),
-            if (listaHoy.isEmpty) Padding(padding: EdgeInsets.all(20), child: Text("Ningún recordatorio", style: TextStyle(color: Colors.grey))),
+            const SizedBox(height: 20),
+            const Align(alignment: Alignment.centerLeft, child: Text("Tareas del día:", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18))),
+            if (listaHoy.isEmpty) const Padding(padding: EdgeInsets.all(20), child: Text("Ningún recordatorio", style: TextStyle(color: Colors.grey))),
             ...listaHoy.map((rec) => Card(
               color: (rec['color'] as Color).withOpacity(0.15),
               elevation: 0,
-              margin: EdgeInsets.symmetric(vertical: 4),
+              margin: const EdgeInsets.symmetric(vertical: 4),
               child: ListTile(
                 leading: CircleAvatar(
                   backgroundColor: rec['color'], 
@@ -550,7 +581,6 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> {
                     if (rec['tipo'] == 'tarea')
                       Checkbox(
                         value: rec['completada'] ?? false,
-                        // Si ya esta completada, desactivamos el checkbox (onChanged: null)
                         onChanged: (rec['completada'] ?? false) 
                           ? null 
                           : (bool? value) {
@@ -574,21 +604,85 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> {
   }
 
   Widget _paginaExplorar() {
+    // Obtenemos todas las tareas activas para el Dropdown
+    final todasLasTareas = _recordatorios.values
+        .expand((lista) => lista)
+        .where((r) => r['tipo'] == 'tarea' && (r['completada'] == false))
+        .toList();
+
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text('Cronómetro', style: TextStyle(fontSize: 24, color: Colors.blueGrey)),
-          Text(_formatearTiempo(_tiempoTranscurrido), style: TextStyle(fontSize: 70, fontWeight: FontWeight.bold, fontFamily: 'monospace')),
-          SizedBox(height: 40),
+          const Text('Cronómetro', style: TextStyle(fontSize: 24, color: Colors.blueGrey)),
+          const SizedBox(height: 20),
+
+          // Selector de tarea (Dropdown)
+          if (!_cronometroActivo) ...[
+            const Text("Trabajar en:", style: TextStyle(fontWeight: FontWeight.bold)),
+            DropdownButton<int>(
+              value: _selectedRecordatoriId,
+              hint: const Text("Selecciona una tarea (opcional)"),
+              onChanged: (int? newValue) {
+                setState(() {
+                  _selectedRecordatoriId = newValue;
+                });
+              },
+              items: [
+                const DropdownMenuItem<int>(
+                  value: null,
+                  child: Text("Sin tarea asignada"),
+                ),
+                ...todasLasTareas.map((tarea) {
+                  return DropdownMenuItem<int>(
+                    value: tarea['id'],
+                    child: Text(tarea['mensaje']),
+                  );
+                }).toList(),
+              ],
+            ),
+            const SizedBox(height: 20),
+          ] else if (_selectedRecordatoriId != null) ...[
+            // Si el cronómetro está activo, mostramos el nombre de la tarea seleccionada
+            Text(
+              "Tarea actual: ${todasLasTareas.firstWhere((t) => t['id'] == _selectedRecordatoriId, orElse: () => {'mensaje': '...' })['mensaje']}",
+              style: const TextStyle(fontStyle: FontStyle.italic, color: Colors.blue),
+            ),
+            const SizedBox(height: 20),
+          ],
+
+          Text(_formatearTiempo(_tiempoTranscurrido), style: const TextStyle(fontSize: 70, fontWeight: FontWeight.bold, fontFamily: 'monospace')),
+          Container(
+            height: 40, width: 200, margin: const EdgeInsets.symmetric(vertical: 10),
+            child: AnimatedBuilder(
+              animation: _animationController,
+              builder: (context, child) => CustomPaint(painter: WavePainter(_animationController.value, _cronometroActivo)),
+            ),
+          ),
+          const SizedBox(height: 40),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              ElevatedButton.icon(onPressed: _alternarCronometro, icon: Icon(_cronometroActivo ? Icons.pause : Icons.play_arrow), label: Text(_cronometroActivo ? 'Parar' : 'Iniciar'), style: ElevatedButton.styleFrom(backgroundColor: _cronometroActivo ? Colors.orange : Colors.green, foregroundColor: Colors.white)),
+              ElevatedButton.icon(
+                onPressed: _alternarCronometro, 
+                icon: Icon(_cronometroActivo ? Icons.pause : Icons.play_arrow), 
+                label: Text(_cronometroActivo ? 'Parar' : 'Iniciar'), 
+                style: ElevatedButton.styleFrom(backgroundColor: _cronometroActivo ? Colors.orange : Colors.green, foregroundColor: Colors.white)
+              ),
               const SizedBox(width: 10),
-              ElevatedButton.icon(onPressed: _guardarSesionEnBackend, icon: const Icon(Icons.save), label: const Text('Finalizar'), style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent, foregroundColor: Colors.white)),
+              ElevatedButton.icon(
+                onPressed: _guardarSesionEnBackend, 
+                icon: const Icon(Icons.save), 
+                label: const Text('Finalizar'), 
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent, foregroundColor: Colors.white)
+              ),
               const SizedBox(width: 10),
-              ElevatedButton.icon(onPressed: _resetearCronometro, icon: const Icon(Icons.refresh), label: const Text('Reset'), style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white)),
+              ElevatedButton.icon(
+                onPressed: _resetearCronometro, 
+                icon: const Icon(Icons.refresh), 
+                label: const Text('Reset'), 
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white)
+              ),
             ],
           ),
         ],
@@ -597,11 +691,8 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> {
   }
 
   Widget _paginaTienda() {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return Column(
       children: [
-        // Cabecera de Puntos
         Padding(
           padding: const EdgeInsets.all(16.0),
           child: Container(
@@ -626,8 +717,6 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> {
             ),
           ),
         ),
-        
-        // Grid de Items
         Expanded(
           child: _itemsTienda.isEmpty 
             ? const Center(child: CircularProgressIndicator())
@@ -648,18 +737,17 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.redeem, size: 50, color: Colors.blue[300]),
+                        const Icon(Icons.redeem, size: 50, color: Colors.blue),
                         const SizedBox(height: 10),
                         Text(item['nom'] ?? 'Objeto', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                         const SizedBox(height: 4),
-                        Text("${item['preu']} pts", style: TextStyle(color: Colors.blue[700], fontWeight: FontWeight.w600)),
+                        Text("${item['preu']} pts", style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.w600)),
                         const SizedBox(height: 12),
                         ElevatedButton(
                           onPressed: () => _comprarItem(item['id']),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.blueAccent,
                             foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                           ),
                           child: const Text("Comprar"),
                         )
@@ -679,19 +767,19 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> {
         padding: const EdgeInsets.symmetric(vertical: 40.0, horizontal: 20.0),
         child: Column(
           children: [
-            CircleAvatar(radius: 60, backgroundColor: Colors.blue[100], child: Icon(Icons.person, size: 80, color: Colors.blue)),
-            SizedBox(height: 20),
+            const CircleAvatar(radius: 60, backgroundColor: Colors.blue, child: Icon(Icons.person, size: 80, color: Colors.white)),
+            const SizedBox(height: 20),
             Text("$_nombreReal $_apellidosReal".trim().isNotEmpty ? "$_nombreReal $_apellidosReal" : widget.nombreUsuario, 
                  style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold)),
-            Text(_correoUsuario, style: TextStyle(fontSize: 16, color: Colors.grey[600])),
-            SizedBox(height: 40),
+            Text(_correoUsuario, style: const TextStyle(fontSize: 16, color: Colors.grey)),
+            const SizedBox(height: 40),
             Card(
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
               child: Column(
                 children: [
-                  ListTile(leading: Icon(Icons.settings, color: Colors.blue), title: Text('Configuración'), trailing: Icon(Icons.arrow_forward_ios, size: 16), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsPage()))),
-                  Divider(height: 1),
-                  ListTile(leading: Icon(Icons.logout, color: Colors.red), title: Text('Cerrar Sesión', style: TextStyle(color: Colors.red)), onTap: _cerrarSesion),
+                  ListTile(leading: const Icon(Icons.settings, color: Colors.blue), title: const Text('Configuración'), trailing: const Icon(Icons.arrow_forward_ios, size: 16), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const SettingsPage()))),
+                  const Divider(height: 1),
+                  ListTile(leading: const Icon(Icons.logout, color: Colors.red), title: const Text('Cerrar Sesión'), onTap: _cerrarSesion),
                 ],
               ),
             ),
@@ -704,7 +792,24 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('FocusUp'), automaticallyImplyLeading: false),
+      appBar: AppBar(
+        title: const Text('FocusUp'),
+        automaticallyImplyLeading: false,
+        actions: [
+          Row(
+            children: [
+              const Icon(Icons.stars, color: Colors.amber, size: 20),
+              const SizedBox(width: 4),
+              Text('$_puntosUsuario', style: const TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(width: 12),
+              const Icon(Icons.whatshot, color: Colors.orange),
+              const SizedBox(width: 4),
+              Text('$_rachaActual', style: const TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(width: 16),
+            ],
+          ),
+        ],
+      ),
       body: [_paginaInicio(), _paginaExplorar(), _paginaTienda(), _paginaPerfil()][_indiceActual],
       floatingActionButton: FloatingActionButton(onPressed: _mostrarOpcionesFab, child: const Icon(Icons.add), backgroundColor: Colors.blue, foregroundColor: Colors.white),
       bottomNavigationBar: BottomNavigationBar(
@@ -712,11 +817,30 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> {
         currentIndex: _indiceActual, onTap: (index) => setState(() => _indiceActual = index),
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Inicio'),
-          BottomNavigationBarItem(icon: Icon(Icons.alarm), label: 'Cronómetro'),
+          BottomNavigationBarItem(icon: Icon(Icons.alarm), label: 'Reloj'),
           BottomNavigationBarItem(icon: Icon(Icons.shopping_cart), label: 'Tienda'),
           BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Perfil'),
         ],
       ),
     );
   }
+}
+
+class WavePainter extends CustomPainter {
+  final double progress; final bool activo; WavePainter(this.progress, this.activo);
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = Colors.green..strokeWidth = 3..style = PaintingStyle.stroke..strokeCap = StrokeCap.round;
+    final path = Path(); final width = size.width; final midHeight = size.height / 2;
+    path.moveTo(0, midHeight);
+    if (activo) {
+      for (double i = 0; i <= width; i++) {
+        final y = midHeight + math.sin((i / width * 2 * math.pi * 3) + (progress * 2 * math.pi)) * 10;
+        path.lineTo(i, y);
+      }
+    } else { path.lineTo(width, midHeight); }
+    canvas.drawPath(path, paint);
+  }
+  @override
+  bool shouldRepaint(covariant WavePainter oldDelegate) => oldDelegate.progress != progress || oldDelegate.activo != activo;
 }
