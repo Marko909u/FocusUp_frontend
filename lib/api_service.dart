@@ -51,3 +51,4 @@ class ApiService {
 
 // Creamos una instancia global (Singleton) para usarla en toda la app
 final apiService = ApiService().dio;
+
