@@ -3,9 +3,14 @@ import 'package:focusup/app.dart';
 import 'package:focusup/login.dart';
 import 'package:focusup/register.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'token_storage.dart';
+import 'api_service.dart';
 
 // Notificador global para el tema
 final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.light);
+
+// Navigator Key para navegar sin contexto (ej: desde el Interceptor de Dio)
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() {
   runApp(const MyApp());
@@ -20,6 +25,7 @@ class MyApp extends StatelessWidget {
       valueListenable: themeNotifier,
       builder: (_, ThemeMode currentMode, __) {
         return MaterialApp(
+          navigatorKey: navigatorKey,
           debugShowCheckedModeBanner: false,
           title: 'Mi App',
           theme: ThemeData(
@@ -39,9 +45,70 @@ class MyApp extends StatelessWidget {
           supportedLocales: const [
             Locale('es', 'ES'),
           ],
-          home: const MenuPrincipal(),
+          // Usamos rutas para facilitar la navegación global
+          initialRoute: '/',
+          routes: {
+            '/': (context) => const InitialCheck(),
+            '/menu': (context) => const MenuPrincipal(),
+            '/login': (context) => const Login(),
+          },
         );
       },
+    );
+  }
+}
+
+class InitialCheck extends StatefulWidget {
+  const InitialCheck({super.key});
+
+  @override
+  State<InitialCheck> createState() => _InitialCheckState();
+}
+
+class _InitialCheckState extends State<InitialCheck> {
+  @override
+  void initState() {
+    super.initState();
+    _checkToken();
+  }
+
+  Future<void> _checkToken() async {
+    final token = await TokenStorage.getToken();
+    if (token != null) {
+      try {
+        // Intentamos obtener los datos del usuario para validar el token
+        final response = await apiService.get('/users/me');
+        if (mounted && response.statusCode == 200) {
+          final userData = response.data;
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => PaginaPrincipal(
+                nombreUsuario: userData['username'] ?? 'Usuario',
+                correoUsuario: userData['email'] ?? '',
+              ),
+            ),
+          );
+          return;
+        }
+      } catch (e) {
+        debugPrint("Token inválido o error de red: $e");
+        await TokenStorage.deleteToken();
+      }
+    }
+    
+    // Si no hay token o falló la validación, vamos al menú principal
+    if (mounted) {
+      Navigator.pushReplacementNamed(context, '/menu');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      body: Center(
+        child: CircularProgressIndicator(),
+      ),
     );
   }
 }

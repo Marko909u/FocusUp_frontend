@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:focusup/app.dart';
 import 'package:form_field_validator/form_field_validator.dart';
 import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:dio/dio.dart'; // <--- CAMBIADO
 import 'dart:convert';
-import 'token_storage.dart'; // <--- AÑADE ESTO
+import 'token_storage.dart'; 
+import 'api_service.dart'; // <--- AÑADIDO
 
 class Login extends StatefulWidget {
   const Login({Key? key}) : super(key: key);
@@ -21,25 +21,25 @@ class _LoginState extends State<Login> {
   final controladorPassword = TextEditingController();
 
   Future<void> logearUsuario() async {
-    final url = Uri.parse('https://backend-focusup.onrender.com/api/auth/login');
-    final response = await http.post(
-      url,
-      headers: {"Content-Type": "application/json"},
-      body: jsonEncode({
-        "username": controladorUsuario.text,
-        "password": controladorPassword.text,
-      }),
-    );
+    try {
+      final response = await apiService.post(
+        '/auth/login',
+        data: {
+          "username": controladorUsuario.text,
+          "password": controladorPassword.text,
+        },
+      );
 
-    if (response.statusCode == 200) {
-      // 1. Decodificamos el cuerpo de la respuesta
-      final dynamic decodedBody = jsonDecode(response.body);
-      String token;
-      String email = controladorUsuario.text; // Valor por defecto (el username suele ser el email)
+      // 1. Obtenemos los datos de la respuesta
+      final dynamic decodedBody = response.data;
+      print("📦 Respuesta del Backend: $decodedBody");
+      
+      String? token;
+      String email = controladorUsuario.text; // Valor por defecto
 
-      // 2. Si es un mapa (JSON), buscamos la clave 'token' y 'email' si existe
+      // 2. Si es un mapa (JSON), buscamos la clave 'token' y 'email'
       if (decodedBody is Map) {
-        token = decodedBody['token'] ?? response.body;
+        token = decodedBody['token']?.toString();
         if (decodedBody.containsKey('email')) {
           email = decodedBody['email'];
         }
@@ -47,11 +47,17 @@ class _LoginState extends State<Login> {
         token = decodedBody.toString();
       }
 
-      // 3. Guardamos el token ya limpio
+      print("🎫 Token extraído: $token");
+
+      if (token == null || token.isEmpty || token == "null") {
+        print("❌ ERROR: El token recibido es nulo o inválido");
+        throw Exception("Token no encontrado en la respuesta");
+      }
+
+      // 3. Guardamos el token
       await TokenStorage.saveToken(token);
 
-      print("¡Login exitoso! Token limpio guardado.");
-
+      print("¡Login exitoso! Token guardado.");
 
       if (mounted) {
         Navigator.pushReplacement(
@@ -59,18 +65,24 @@ class _LoginState extends State<Login> {
           MaterialPageRoute(
             builder: (context) => PaginaPrincipal(
               nombreUsuario: controladorUsuario.text,
-              correoUsuario: email, // <--- Corregido: pasamos el correo
+              correoUsuario: email,
             ),
           ),
         );
       }
-    } else {
-      print("Credenciales incorrectas (Error ${response.statusCode})");
+    } on DioException catch (e) {
+      print("Error en el login (Status ${e.response?.statusCode}): ${e.response?.data}");
       if (mounted) {
+        String errorMsg = "Usuario o contraseña incorrectos";
+        if (e.response?.statusCode == 400 || e.response?.statusCode == 401) {
+          errorMsg = e.response?.data['message'] ?? errorMsg;
+        }
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Usuario o contraseña incorrectos")),
+          SnackBar(content: Text(errorMsg)),
         );
       }
+    } catch (e) {
+      print("Error inesperado: $e");
     }
   }
   @override

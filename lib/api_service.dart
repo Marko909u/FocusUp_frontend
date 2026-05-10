@@ -1,5 +1,7 @@
 import 'package:dio/dio.dart';
-import 'token_storage.dart'; // Importa el archivo del Paso 2
+import 'package:flutter/material.dart';
+import 'token_storage.dart'; 
+import 'main.dart'; // Importamos main.dart para acceder al navigatorKey
 
 class ApiService {
   late Dio dio;
@@ -22,12 +24,18 @@ class ApiService {
       InterceptorsWrapper(
         // 1. ANTES DE ENVIAR LA PETICIÓN: Añadimos el Token
         onRequest: (options, handler) async {
+          print("🌐 Petición Dio a: ${options.path}");
           if (!options.path.contains('/auth/login') && !options.path.contains('/auth/register')) {
             String? token = await TokenStorage.getToken();
-            if (token != null) {
+            print("🔑 Token recuperado de storage: $token");
+
+            if (token != null && token.isNotEmpty && token != "null") {
               // LIMPIEZA MÁGICA: Quitamos comillas extra que puedan venir del backend
               final cleanToken = token.replaceAll('"', '').trim();
               options.headers['Authorization'] = 'Bearer $cleanToken';
+              print("✅ Cabecera Authorization añadida correctamente");
+            } else {
+              print("⚠️ No hay token válido para esta petición");
             }
           }
           return handler.next(options);
@@ -39,8 +47,8 @@ class ApiService {
             print("Token caducado o inválido. Cerrando sesión...");
             await TokenStorage.deleteToken();
 
-            // TODO: Aquí deberías redirigir al usuario a la pantalla de Login.
-            // Ej: navigatorKey.currentState?.pushReplacementNamed('/login');
+            // Redirigimos al usuario a la pantalla de menú principal/login
+            navigatorKey.currentState?.pushNamedAndRemoveUntil('/menu', (route) => false);
           }
           return handler.next(e); // Pasa el error para manejarlo en la UI si hace falta
         },

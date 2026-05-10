@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'main.dart';
 import 'settings.dart';
 import 'api_service.dart';
@@ -332,17 +331,129 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> with SingleTickerProv
   void _resetearCronometro() { _cronometro?.cancel(); _animationController.stop(); _animationController.value = 0; setState(() { _tiempoTranscurrido = Duration.zero; _cronometroActivo = false; _selectedRecordatoriId = null; _tiempoRestante = Duration.zero; _estaEnFaseEstudio = true; }); }
 
   Future<void> _guardarSesionEnBackend() async {
-    int minutos = _tiempoTranscurrido.inMinutes; if (minutos == 0 && _tiempoTranscurrido.inSeconds > 0) minutos = 1; if (minutos <= 0) return;
+    int minutos = _tiempoTranscurrido.inMinutes;
+    if (minutos == 0 && _tiempoTranscurrido.inSeconds > 0) minutos = 1;
+    if (minutos <= 0) return;
     try {
-      final res = await apiService.post('/sessions', data: {"minuts": minutos, if (_selectedRecordatoriId != null) "recordatoriId": _selectedRecordatoriId});
+      final res = await apiService.post('/sessions', data: {
+        "minuts": minutos,
+        if (_selectedRecordatoriId != null) "recordatoriId": _selectedRecordatoriId
+      });
       if (res.statusCode == 200) {
+        int puntosGanados = res.data['puntosGanados'] ?? 0;
         setState(() => _puntosUsuario = res.data['nuevoSaldo'] ?? _puntosUsuario);
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("¡Éxito! Ganaste ${res.data['puntosGanados']} puntos."), backgroundColor: Colors.green));
+        
         _resetearCronometro();
         if (_grupoSeleccionado != null) _cargarDatosGrupo(_grupoSeleccionado!['id']); else _cargarRecordatoriosDesdeBackend();
         _cargarDatosUsuarioYTienda();
+
+        // Lanzamos el popup para que el usuario guarde una nota si quiere
+        if (mounted) {
+          _mostrarPopupNuevaNota(minutos, puntosGanados);
+        }
       }
-    } catch (e) {}
+    } catch (e) {
+      debugPrint("Error guardando sesión: $e");
+    }
+  }
+
+  Future<void> _mostrarPopupNuevaNota(int minutosEstudiados, int puntosGanados) async {
+    TextEditingController titolController = TextEditingController();
+    TextEditingController contingutController = TextEditingController();
+
+    return showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('¡Sesión completada! 🏆'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Has ganado $puntosGanados puntos por concentrarte $minutosEstudiados minutos.'),
+                const SizedBox(height: 15),
+                const Text('¿Qué has estudiado? Registra tu progreso:', style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: titolController,
+                  decoration: const InputDecoration(
+                    labelText: 'Título de la nota',
+                    hintText: 'Ej: Repaso de Matemáticas',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: contingutController,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    labelText: 'Resumen o apuntes (Opcional)',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              child: const Text('Solo reclamar puntos'),
+              onPressed: () {
+                Navigator.of(context).pop();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Puntos añadidos a tu perfil"), backgroundColor: Colors.green),
+                );
+              },
+            ),
+            ElevatedButton(
+              child: const Text('Guardar Nota'),
+              onPressed: () {
+                if (titolController.text.isNotEmpty) {
+                  Navigator.of(context).pop();
+                  _enviarNotaAlBackend(titolController.text, contingutController.text);
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('El título no puede estar vacío')),
+                  );
+                }
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _enviarNotaAlBackend(String titol, String contingut) async {
+    try {
+      String fechaCorta = "${DateTime.now().year}-${DateTime.now().month.toString().padLeft(2, '0')}-${DateTime.now().day.toString().padLeft(2, '0')}";
+      
+      final response = await apiService.post(
+        '/notas',
+        data: {
+          'titol': titol,
+          'contingut': contingut,
+          'data': fechaCorta,
+        },
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('✅ Nota guardada correctamente en tu diario'), backgroundColor: Colors.green),
+          );
+        }
+        _cargarNotasDesdeBackend(); // Recargamos para que aparezca en el calendario
+      }
+    } catch (e) {
+      debugPrint("Error al guardar la nota: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('❌ Error al guardar la nota de estudio'), backgroundColor: Colors.red),
+        );
+      }
+    }
   }
 
   String _formatearTiempo(Duration d) { String dd(int n) => n.toString().padLeft(2, '0'); return "${dd(d.inHours)}:${dd(d.inMinutes.remainder(60))}:${dd(d.inSeconds.remainder(60))}"; }
