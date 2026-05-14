@@ -71,7 +71,7 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> with SingleTickerProv
 
   Future<void> _cargarGruposDesdeBackend() async {
     try {
-      final response = await apiService.get('/grups');
+      final response = await apiService.get('/grups/me');
       if (mounted) setState(() { _grupos = response.data; });
     } catch (e) { debugPrint("Error grupos: $e"); }
   }
@@ -88,8 +88,14 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> with SingleTickerProv
     try {
       final resRecs = await apiService.get('/grups/$grupId/recordatoris');
       final resNotas = await apiService.get('/grups/$grupId/notas');
+      final resRanking = await apiService.get('/grups/$grupId/ranking');
+
       if (mounted) {
         setState(() {
+          if (_grupoSeleccionado != null) {
+            _grupoSeleccionado!['membres'] = resRanking.data;
+          }
+
           _recordatoriosGrupo.clear();
           for (var item in resRecs.data) {
             DateTime f = _soloFecha(DateTime.parse(item['dataHora']));
@@ -113,17 +119,23 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> with SingleTickerProv
 
   Future<void> _crearGrupoEnBackend(String nombre, String codigo) async {
     try {
-      await apiService.post('/grups', data: {"nom": nombre, "codi": codigo});
+      print("Enviando a backend: nom=$nombre, codi=$codigo");
+      final response = await apiService.post('/grups', data: {
+        "nom": nombre,
+        "codi": codigo // Verifica si en Java es "codi" o "codiAcces"
+      });
+      print("Respuesta servidor: ${response.data}");
       _cargarGruposDesdeBackend();
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("¡Grupo creado!"), backgroundColor: Colors.green));
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Error al crear grupo (500)"), backgroundColor: Colors.red));
+    } on DioException catch (e) {
+      print("🔴 ERROR 500 DETALLADO:");
+      print("Mensaje: ${e.message}");
+      print("Respuesta del servidor: ${e.response?.data}");
     }
   }
 
   Future<void> _unirseAGrupoEnBackend(String codigo) async {
     try {
-      await apiService.post('/grups/unir', data: {"codi": codigo});
+      await apiService.post('/grups/join', data: {"codi_acces": codigo});
       _cargarGruposDesdeBackend();
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("¡Unido con éxito!"), backgroundColor: Colors.green));
     } catch (e) {
