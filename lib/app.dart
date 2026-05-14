@@ -853,7 +853,7 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> with SingleTickerProv
                 ChoiceChip(label: const Text("Ninguna"), selected: _tecnicaSeleccionada == 0, onSelected: (v) { if (!_cronometroActivo) setState(() => _tecnicaSeleccionada = 0); }),
                 ChoiceChip(label: const Text("Pomodoro"), selected: _tecnicaSeleccionada == 1, onSelected: (v) { if (!_cronometroActivo) setState(() => _tecnicaSeleccionada = 1); }),
                 ChoiceChip(label: const Text("Personalizada"), selected: _tecnicaSeleccionada == 2, onSelected: (v) { if (!_cronometroActivo) setState(() => _tecnicaSeleccionada = 2); }),
-                ChoiceChip(label: const Text("Flowtime"), selected: _tecnicaSeleccionada == 3, onSelected: (v) { if (!_cronometroActivo) setState(() => { _tecnicaSeleccionada = 3, _esTemporizador = false }); }),
+                ChoiceChip(label: const Text("Flowtime"), selected: _tecnicaSeleccionada == 3, onSelected: (v) { if (!_cronometroActivo) setState(() { _tecnicaSeleccionada = 3; _esTemporizador = false; }); }),
               ],
             ),
             const SizedBox(height: 20),
