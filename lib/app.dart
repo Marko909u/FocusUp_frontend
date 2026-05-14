@@ -118,19 +118,47 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> with SingleTickerProv
     } catch (e) { debugPrint("Error datos grupo: $e"); }
   }
 
-  Future<void> _crearGrupoEnBackend(String nombre, String codigo) async {
+  Future<void> _crearGrupoEnBackend(String nombre) async {
     try {
-      print("Enviando a backend: nom=$nombre, codi=$codigo");
       final response = await apiService.post('/grups', data: {
         "nom": nombre,
-        "codi": codigo // Verifica si en Java es "codi" o "codiAcces"
+        // Ya no enviamos "codi", el servidor lo genera solo
       });
-      print("Respuesta servidor: ${response.data}");
-      _cargarGruposDesdeBackend();
+
+      // Extraemos el código generado por el servidor
+      final String codiGenerado = response.data['codi_acces'] ?? "???";
+
+      if (mounted) {
+        // Mostramos un Popup con el código para que el usuario lo vea
+        showDialog(
+          context: context,
+          builder: (c) => AlertDialog(
+            title: const Text("¡Grupo Creado! 🚀"),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text("Comparte este código con tus amigos para que se unan:"),
+                const SizedBox(height: 15),
+                SelectableText(
+                  codiGenerado,
+                  style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.blue),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(c), child: const Text("Cerrar"))
+            ],
+          ),
+        );
+      }
+      _cargarGruposDesdeBackend(); // Refrescamos la lista
     } on DioException catch (e) {
-      print("🔴 ERROR 500 DETALLADO:");
-      print("Mensaje: ${e.message}");
-      print("Respuesta del servidor: ${e.response?.data}");
+      print("Error al crear grupo: ${e.response?.data}");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Error al crear el grupo"), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 
@@ -371,8 +399,34 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> with SingleTickerProv
   }
 
   void _mostrarDialogoCrearGrupo() {
-    String n = ""; String cod = "";
-    showDialog(context: context, builder: (c) => AlertDialog(title: const Text('Crear Grupo'), content: Column(mainAxisSize: MainAxisSize.min, children: [TextField(decoration: const InputDecoration(labelText: 'Nombre'), onChanged: (v) => n = v), TextField(decoration: const InputDecoration(labelText: 'Código'), onChanged: (v) => cod = v)]), actions: [TextButton(onPressed: () => Navigator.pop(c), child: const Text('Cancelar')), ElevatedButton(onPressed: () { if (n.isNotEmpty && cod.isNotEmpty) { _crearGrupoEnBackend(n, cod); Navigator.pop(c); } }, child: const Text('Crear'))]));
+    String n = "";
+    showDialog(
+        context: context,
+        builder: (c) => AlertDialog(
+            title: const Text('Crear Grupo'),
+            content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                      decoration: const InputDecoration(labelText: 'Nombre del Grupo'),
+                      onChanged: (v) => n = v
+                  )
+                ]
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(c), child: const Text('Cancelar')),
+              ElevatedButton(
+                  onPressed: () {
+                    if (n.isNotEmpty) {
+                      Navigator.pop(c); // Cerramos el diálogo de creación
+                      _crearGrupoEnBackend(n); // Solo pasamos el nombre
+                    }
+                  },
+                  child: const Text('Crear')
+              )
+            ]
+        )
+    );
   }
 
   void _mostrarDialogoUnirseGrupo() {

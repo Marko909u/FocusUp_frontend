@@ -21,7 +21,6 @@ class ApiService {
     // AÑADIMOS EL INTERCEPTOR MÁGICO
     dio.interceptors.add(
       InterceptorsWrapper(
-        // 1. ANTES DE ENVIAR LA PETICIÓN: Añadimos el Token
         onRequest: (options, handler) async {
           print("🌐 Petición Dio a: ${options.path}");
           if (!options.path.contains('/auth/login') && !options.path.contains('/auth/register')) {
@@ -29,7 +28,6 @@ class ApiService {
             print("🔑 Token recuperado de storage: $token");
 
             if (token != null && token.isNotEmpty && token != "null") {
-              // LIMPIEZA MÁGICA: Quitamos comillas extra que puedan venir del backend
               final cleanToken = token.replaceAll('"', '').trim();
               options.headers['Authorization'] = 'Bearer $cleanToken';
               print("✅ Cabecera Authorization añadida correctamente");
