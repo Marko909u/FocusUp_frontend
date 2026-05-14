@@ -89,6 +89,7 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> with SingleTickerProv
       final resRecs = await apiService.get('/grups/$grupId/recordatoris');
       final resNotas = await apiService.get('/grups/$grupId/notas');
       final resRanking = await apiService.get('/grups/$grupId/ranking');
+      //Para el commit.
 
       if (mounted) {
         setState(() {
