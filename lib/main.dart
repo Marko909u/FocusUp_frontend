@@ -177,24 +177,6 @@ class MenuPrincipal extends StatelessWidget {
               child: const Text('Iniciar Sesión', style: TextStyle(fontSize: 18)),
             ),
             const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const PaginaPrincipal(
-                    nombreUsuario: 'pruebas',
-                    correoUsuario: 'pruebas@focusup.com', // <--- Corregido: añadimos el parámetro faltante
-                  )),
-                );
-              },
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 15),
-                backgroundColor: Colors.red,
-                foregroundColor: Colors.white,
-              ),
-              child: const Text('pruebas', style: TextStyle(fontSize: 18)),
-            ),
-            const SizedBox(height: 20),
           ],
         ),
       ),

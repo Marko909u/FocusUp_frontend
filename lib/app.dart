@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'main.dart';
 import 'settings.dart'; 
 import 'api_service.dart';
@@ -14,10 +13,10 @@ class PaginaPrincipal extends StatefulWidget {
   final String correoUsuario;
 
   const PaginaPrincipal({
-    Key? key, 
+    super.key, 
     required this.nombreUsuario,
     required this.correoUsuario,
-  }) : super(key: key);
+  });
   
   @override
   _PaginaPrincipalState createState() => _PaginaPrincipalState();
@@ -42,13 +41,14 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> with SingleTickerProv
 
   // Variables para el modo Reloj y Técnicas
   bool _esTemporizador = false;
-  int _tecnicaSeleccionada = 0; // 0: Ninguna, 1: Pomodoro, 2: Personalizada
+  int _tecnicaSeleccionada = 0; // 0: Ninguna, 1: Pomodoro, 2: Personalizada, 3: Flowtime
   bool _estaEnFaseEstudio = true;
   int _tempHoras = 0;
   int _tempMinutos = 25;
   int _estudioPersonalizado = 25;
   int _descansoPersonalizado = 5;
   Duration _tiempoRestante = Duration.zero;
+  Duration _tiempoDescansoLibre = Duration.zero;
 
   Timer? _cronometro;
   Duration _tiempoTranscurrido = Duration.zero;
@@ -242,6 +242,22 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> with SingleTickerProv
     }
   }
 
+  Future<void> _desequiparItem(int itemId) async {
+    try {
+      final response = await apiService.post('/inventari/desequipar/$itemId');
+      if (response.statusCode == 200) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("¡Desequipado correctamente!"), backgroundColor: Colors.orange));
+          _cargarDatosUsuarioYTienda();
+        }
+      }
+    } on DioException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.response?.data['error'] ?? "Error al desequipar"), backgroundColor: Colors.red));
+      }
+    }
+  }
+
   DateTime _soloFecha(DateTime fecha) => DateTime(fecha.year, fecha.month, fecha.day);
 
   @override
@@ -291,10 +307,10 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> with SingleTickerProv
       children: [
         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
           IconButton(icon: const Icon(Icons.chevron_left, color: Colors.blue, size: 20), onPressed: () => setState(() => _fechaSeleccionada = DateTime(_fechaSeleccionada.year, _fechaSeleccionada.month - 1, 1))),
-          Text("${_nombreMes(_fechaSeleccionada.month)} ${_fechaSeleccionada.year}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+          Text("${_nombreMes(_fechaSeleccionada.month)} ${_fechaSeleccionada.year}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
           IconButton(icon: const Icon(Icons.chevron_right, color: Colors.blue, size: 20), onPressed: () => setState(() => _fechaSeleccionada = DateTime(_fechaSeleccionada.year, _fechaSeleccionada.month + 1, 1))),
         ]),
-        Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: ["L", "M", "X", "J", "V", "S", "D"].map((d) => Text(d, style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold, fontSize: 10))).toList()),
+        Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: ["L", "M", "X", "J", "V", "S", "D"].map((d) => Text(d, style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold, fontSize: 12))).toList()),
         GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
@@ -317,7 +333,7 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> with SingleTickerProv
                   border: sel ? Border.all(color: Colors.blue, width: 1) : null,
                 ),
                 child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                  Text("$dia", style: TextStyle(fontSize: 12, fontWeight: sel ? FontWeight.bold : FontWeight.normal)),
+                  Text("$dia", style: TextStyle(fontSize: 16, fontWeight: sel ? FontWeight.bold : FontWeight.normal)),
                   Row(mainAxisAlignment: MainAxisAlignment.center, children: recs.take(3).map((r) => Container(width: 4, height: 4, margin: const EdgeInsets.symmetric(horizontal: 0.5), decoration: BoxDecoration(shape: r['tipo'] == 'tarea' ? BoxShape.rectangle : BoxShape.circle, color: r['color']))).toList())
                 ]),
               ),
@@ -398,28 +414,53 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> with SingleTickerProv
   }
 
   void _alternarCronometro() {
-    if (_cronometroActivo) { _cronometro?.cancel(); _animationController.stop(); setState(() => _cronometroActivo = false); }
-    else {
-      if (_tecnicaSeleccionada != 0 && _tiempoRestante == Duration.zero) {
+    if (_cronometroActivo) {
+      _cronometro?.cancel();
+      _animationController.stop();
+      setState(() => _cronometroActivo = false);
+    } else {
+      if ((_tecnicaSeleccionada == 1 || _tecnicaSeleccionada == 2) && _tiempoRestante == Duration.zero) {
         _tiempoRestante = Duration(minutes: _tecnicaSeleccionada == 1 ? 25 : _estudioPersonalizado);
         _estaEnFaseEstudio = true;
       } else if (_esTemporizador && _tiempoRestante == Duration.zero) {
         _tiempoRestante = Duration(hours: _tempHoras, minutes: _tempMinutos);
       }
-      
-      if ((_esTemporizador || _tecnicaSeleccionada != 0) && _tiempoRestante <= Duration.zero) return;
+
+      if ((_esTemporizador || (_tecnicaSeleccionada != 0 && _tecnicaSeleccionada != 3)) && _tiempoRestante <= Duration.zero) return;
 
       setState(() => _cronometroActivo = true);
       _animationController.repeat();
+
       _cronometro = Timer.periodic(const Duration(seconds: 1), (timer) {
         setState(() {
-          _tiempoTranscurrido += const Duration(seconds: 1);
-          if (_esTemporizador || _tecnicaSeleccionada != 0) {
+          if (_esTemporizador || (_tecnicaSeleccionada != 0 && _tecnicaSeleccionada != 3)) {
+            _tiempoTranscurrido += const Duration(seconds: 1);
             _tiempoRestante -= const Duration(seconds: 1);
             if (_tiempoRestante <= Duration.zero) {
               _tiempoRestante = Duration.zero;
-              if (_tecnicaSeleccionada != 0) _cambiarFaseTecnica();
-              else { _cronometro?.cancel(); _cronometroActivo = false; _animationController.stop(); }
+              if (_tecnicaSeleccionada != 0) {
+                _cambiarFaseTecnica();
+              } else {
+                _cronometro?.cancel(); _cronometroActivo = false; _animationController.stop();
+              }
+            }
+          } else if (_tecnicaSeleccionada == 3) {
+            if (_estaEnFaseEstudio) {
+              _tiempoTranscurrido += const Duration(seconds: 1);
+            } else {
+              _tiempoRestante -= const Duration(seconds: 1);
+              if (_tiempoRestante <= Duration.zero) {
+                _tiempoRestante = Duration.zero;
+                _estaEnFaseEstudio = true;
+                _tiempoTranscurrido = Duration.zero;
+                _mostrarNotificacionFase("¡Tiempo de descanso terminado!", "Hora de volver al estudio.");
+              }
+            }
+          } else {
+            if (_estaEnFaseEstudio) {
+              _tiempoTranscurrido += const Duration(seconds: 1);
+            } else {
+              _tiempoDescansoLibre += const Duration(seconds: 1);
             }
           }
         });
@@ -427,23 +468,55 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> with SingleTickerProv
     }
   }
 
-  void _cambiarFaseTecnica() {
-    _estaEnFaseEstudio = !_estaEnFaseEstudio;
-    int mins = _tecnicaSeleccionada == 1 ? (_estaEnFaseEstudio ? 25 : 5) : (_estaEnFaseEstudio ? _estudioPersonalizado : _descansoPersonalizado);
-    _tiempoRestante = Duration(minutes: mins);
-
+  void _mostrarNotificacionFase(String titulo, String mensaje) {
     showDialog(
       context: context,
       builder: (c) => AlertDialog(
-        title: Text(_estaEnFaseEstudio ? "¡Hora de estudiar!" : "¡Hora de descansar!"),
-        content: Text(_estaEnFaseEstudio ? "Fase de descanso terminada. ¡A por ello!" : "Buen trabajo. Tómate un respiro de $mins minutos."),
+        title: Text(titulo),
+        content: Text(mensaje),
         actions: [TextButton(onPressed: () => Navigator.pop(c), child: const Text("Entendido"))],
       ),
     );
   }
 
-  void _resetearCronometro() { _cronometro?.cancel(); _animationController.stop(); _animationController.value = 0; setState(() { _tiempoTranscurrido = Duration.zero; _cronometroActivo = false; _selectedRecordatoriId = null; _tiempoRestante = Duration.zero; _estaEnFaseEstudio = true; }); }
+  void _cambiarFaseTecnica() {
+    _estaEnFaseEstudio = !_estaEnFaseEstudio;
+    int mins = _tecnicaSeleccionada == 1 ? (_estaEnFaseEstudio ? 25 : 5) : (_estaEnFaseEstudio ? _estudioPersonalizado : _descansoPersonalizado);
+    _tiempoRestante = Duration(minutes: mins);
+    _mostrarNotificacionFase(_estaEnFaseEstudio ? "¡Hora de estudiar!" : "¡Hora de descansar!", _estaEnFaseEstudio ? "Fase de descanso terminada. ¡A por ello!" : "Buen trabajo. Tómate un respiro de $mins minutos.");
+  }
 
+  void _alternarFaseLibre() {
+    setState(() {
+      if (_tecnicaSeleccionada == 3) { // Flowtime
+        if (_estaEnFaseEstudio) {
+          int studySeconds = _tiempoTranscurrido.inSeconds;
+          _tiempoRestante = Duration(seconds: (studySeconds * 0.4).round());
+          _estaEnFaseEstudio = false;
+        } else {
+          _estaEnFaseEstudio = true;
+          _tiempoTranscurrido = Duration.zero;
+        }
+      } else {
+        _estaEnFaseEstudio = !_estaEnFaseEstudio;
+      }
+    });
+  }
+
+
+  void _resetearCronometro() {
+    _cronometro?.cancel();
+    _animationController.stop();
+    _animationController.value = 0;
+    setState(() {
+      _tiempoTranscurrido = Duration.zero;
+      _tiempoDescansoLibre = Duration.zero;
+      _cronometroActivo = false;
+      _selectedRecordatoriId = null;
+      _tiempoRestante = Duration.zero;
+      _estaEnFaseEstudio = true;
+    });
+  }
   Future<void> _guardarSesionEnBackend() async {
     int minutos = _tiempoTranscurrido.inMinutes;
     if (minutos == 0 && _tiempoTranscurrido.inSeconds > 0) minutos = 1; 
@@ -626,7 +699,7 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> with SingleTickerProv
                               child: Text(g['nom'], textAlign: TextAlign.center, maxLines: 2, overflow: TextOverflow.ellipsis, 
                                    style: const TextStyle(color: Colors.blue, fontSize: 12, decoration: TextDecoration.underline)),
                             ),
-                          )).toList(),
+                          )),
                         ],
                       ),
                     ),
@@ -684,7 +757,7 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> with SingleTickerProv
                   ],
                 ),
               ),
-            )).toList(),
+            )),
           ],
         ),
       ),
@@ -713,6 +786,7 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> with SingleTickerProv
                 ChoiceChip(label: const Text("Ninguna"), selected: _tecnicaSeleccionada == 0, onSelected: (v) { if (!_cronometroActivo) setState(() => _tecnicaSeleccionada = 0); }),
                 ChoiceChip(label: const Text("Pomodoro"), selected: _tecnicaSeleccionada == 1, onSelected: (v) { if (!_cronometroActivo) setState(() => _tecnicaSeleccionada = 1); }),
                 ChoiceChip(label: const Text("Personalizada"), selected: _tecnicaSeleccionada == 2, onSelected: (v) { if (!_cronometroActivo) setState(() => _tecnicaSeleccionada = 2); }),
+                ChoiceChip(label: const Text("Flowtime"), selected: _tecnicaSeleccionada == 3, onSelected: (v) { if (!_cronometroActivo) setState(() => { _tecnicaSeleccionada = 3, _esTemporizador = false }); }),
               ],
             ),
             const SizedBox(height: 20),
@@ -739,7 +813,7 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> with SingleTickerProv
                   ...todasLasTareas.map((tarea) => DropdownMenuItem<int>(
                     value: tarea['id'],
                     child: Text(tarea['mensaje']),
-                  )).toList(),
+                  )),
                 ],
               ),
             ] else if (_selectedRecordatoriId != null) ...[
@@ -806,16 +880,25 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> with SingleTickerProv
                 ],
               ),
 
-            if (_tecnicaSeleccionada != 0) 
-              Padding(padding: const EdgeInsets.only(top: 10), child: Text(_estaEnFaseEstudio ? "FASE: ESTUDIO" : "FASE: DESCANSO", style: TextStyle(fontWeight: FontWeight.bold, color: _estaEnFaseEstudio ? Colors.red : Colors.green))),
+            // 1. EL TEXTO DE FASE (Ahora se muestra también en cronómetro libre si ha empezado)
+            if (_tecnicaSeleccionada != 0 || (_tecnicaSeleccionada == 0 && !_esTemporizador && (_cronometroActivo || _tiempoTranscurrido > Duration.zero || _tiempoDescansoLibre > Duration.zero)))
+              Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: Text(_estaEnFaseEstudio ? "FASE: ESTUDIO" : "FASE: DESCANSO",
+                      style: TextStyle(fontWeight: FontWeight.bold, color: _estaEnFaseEstudio ? Colors.red : Colors.green)
+                  )
+              ),
 
+            // 2. EL TEXTO GIGANTE DEL RELOJ
             Text(
-              (_esTemporizador || _tecnicaSeleccionada != 0)
-                ? (_cronometroActivo || _tiempoTranscurrido > Duration.zero ? _formatearTiempo(_tiempoRestante) : _formatearTiempo(Duration(hours: _tempHoras, minutes: _tecnicaSeleccionada == 1 ? 25 : (_tecnicaSeleccionada == 2 ? _estudioPersonalizado : _tempMinutos))))
-                : _formatearTiempo(_tiempoTranscurrido), 
-              style: const TextStyle(fontSize: 70, fontWeight: FontWeight.bold, fontFamily: 'monospace')
+                (_esTemporizador || (_tecnicaSeleccionada != 0 && _tecnicaSeleccionada != 3))
+                    ? (_cronometroActivo || _tiempoTranscurrido > Duration.zero ? _formatearTiempo(_tiempoRestante) : _formatearTiempo(Duration(hours: _tempHoras, minutes: _tecnicaSeleccionada == 1 ? 25 : (_tecnicaSeleccionada == 2 ? _estudioPersonalizado : _tempMinutos))))
+                    : (_tecnicaSeleccionada == 3)
+                      ? (_estaEnFaseEstudio ? _formatearTiempo(_tiempoTranscurrido) : _formatearTiempo(_tiempoRestante))
+                      : (_estaEnFaseEstudio ? _formatearTiempo(_tiempoTranscurrido) : _formatearTiempo(_tiempoDescansoLibre)),
+                style: const TextStyle(fontSize: 70, fontWeight: FontWeight.bold, fontFamily: 'monospace')
             ),
-            
+
             Container(
               height: 40, width: 200, margin: const EdgeInsets.symmetric(vertical: 10),
               child: AnimatedBuilder(
@@ -823,31 +906,48 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> with SingleTickerProv
                 builder: (context, child) => CustomPaint(painter: WavePainter(_animationController.value, _cronometroActivo)),
               ),
             ),
-            
+
             const SizedBox(height: 40),
-            
+
+
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 ElevatedButton.icon(
-                  onPressed: _alternarCronometro, 
-                  icon: Icon(_cronometroActivo ? Icons.pause : Icons.play_arrow), 
-                  label: Text(_cronometroActivo ? 'Parar' : 'Iniciar'), 
-                  style: ElevatedButton.styleFrom(backgroundColor: _cronometroActivo ? Colors.orange : Colors.green, foregroundColor: Colors.white)
+                    onPressed: _alternarCronometro,
+                    icon: Icon(_cronometroActivo ? Icons.pause : Icons.play_arrow),
+                    label: Text(_cronometroActivo ? 'Parar' : 'Iniciar'),
+                    style: ElevatedButton.styleFrom(backgroundColor: _cronometroActivo ? Colors.orange : Colors.green, foregroundColor: Colors.white)
+                ),
+                const SizedBox(width: 10),
+
+
+                if ((_tecnicaSeleccionada == 0 || _tecnicaSeleccionada == 3) && !_esTemporizador && _cronometroActivo)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 10),
+                    child: ElevatedButton.icon(
+                      onPressed: _alternarFaseLibre,
+                      icon: Icon(_estaEnFaseEstudio ? Icons.coffee : Icons.menu_book),
+                      label: Text(_estaEnFaseEstudio ? 'Descansar' : 'Estudiar'),
+                      style: ElevatedButton.styleFrom(
+                          backgroundColor: _estaEnFaseEstudio ? Colors.purple : Colors.blueAccent,
+                          foregroundColor: Colors.white
+                      ),
+                    ),
+                  ),
+
+                ElevatedButton.icon(
+                    onPressed: _guardarSesionEnBackend,
+                    icon: const Icon(Icons.save),
+                    label: const Text('Finalizar'),
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent, foregroundColor: Colors.white)
                 ),
                 const SizedBox(width: 10),
                 ElevatedButton.icon(
-                  onPressed: _guardarSesionEnBackend, 
-                  icon: const Icon(Icons.save), 
-                  label: const Text('Finalizar'), 
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent, foregroundColor: Colors.white)
-                ),
-                const SizedBox(width: 10),
-                ElevatedButton.icon(
-                  onPressed: _resetearCronometro, 
-                  icon: const Icon(Icons.refresh), 
-                  label: const Text('Reset'), 
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white)
+                    onPressed: _resetearCronometro,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Reset'),
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white)
                 ),
               ],
             ),
@@ -894,10 +994,10 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> with SingleTickerProv
             : GridView.builder(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  childAspectRatio: 0.75,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
+                  crossAxisCount: 3,
+                  childAspectRatio: 0.7,
+                  crossAxisSpacing: 10,
+                  mainAxisSpacing: 10,
                 ),
                 itemCount: _itemsTienda.length,
                 itemBuilder: (context, index) {
@@ -905,25 +1005,32 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> with SingleTickerProv
                   final bool comprat = item['comprat'] ?? false;
                   final bool equipat = item['equipat'] ?? false;
                   return Card(
-                    elevation: 4,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                    elevation: 3,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(Icons.redeem, size: 50, color: Colors.blue),
-                        const SizedBox(height: 10),
-                        Text(item['nom'] ?? 'Item', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                        const Icon(Icons.redeem, size: 40, color: Colors.blue),
+                        const SizedBox(height: 8),
+                        Text(item['nom'] ?? 'Item', textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                         const SizedBox(height: 4),
-                        Text("${item['preu']} pts", style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.w600)),
-                        const SizedBox(height: 12),
+                        Text("${item['preu']} pts", style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.w600, fontSize: 11)),
+                        const SizedBox(height: 8),
                         ElevatedButton(
-                          onPressed: equipat ? null : (comprat ? () => _equiparItem(item['id']) : () => _comprarItem(item['id'])),
+                          onPressed: comprat 
+                            ? (equipat ? () => _desequiparItem(item['id']) : () => _equiparItem(item['id']))
+                            : () => _comprarItem(item['id']),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: equipat ? Colors.grey : (comprat ? Colors.green : Colors.blueAccent),
+                            backgroundColor: equipat ? Colors.orange : (comprat ? Colors.green : Colors.blueAccent),
                             foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            minimumSize: const Size(0, 30),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                           ),
-                          child: Text(equipat ? "Equipado" : (comprat ? "Equipar" : "Comprar")),
+                          child: Text(
+                            comprat ? (equipat ? "Quitar" : "Equipar") : "Comprar",
+                            style: const TextStyle(fontSize: 11),
+                          ),
                         )
                       ],
                     ),
@@ -985,7 +1092,7 @@ class _PaginaPrincipalState extends State<PaginaPrincipal> with SingleTickerProv
         ],
       ),
       body: [_paginaInicio(), _paginaExplorar(), _paginaTiendaORanking(), _paginaPerfil()][_indiceActual],
-      floatingActionButton: FloatingActionButton(onPressed: _mostrarOpcionesFab, child: const Icon(Icons.add), backgroundColor: Colors.blue, foregroundColor: Colors.white),
+      floatingActionButton: FloatingActionButton(onPressed: _mostrarOpcionesFab, backgroundColor: Colors.blue, foregroundColor: Colors.white, child: const Icon(Icons.add)),
       bottomNavigationBar: BottomNavigationBar(
         backgroundColor: Colors.blue, selectedItemColor: Colors.white, unselectedItemColor: Colors.blue[100], type: BottomNavigationBarType.fixed,
         currentIndex: _indiceActual, onTap: (index) => setState(() => _indiceActual = index),
