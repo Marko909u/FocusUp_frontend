@@ -4,7 +4,7 @@ import 'package:dio/dio.dart'; // Importamos Dio
 import 'api_service.dart'; // Importamos tu servicio centralizado
 
 class Register extends StatefulWidget {
-  const Register({Key? key}) : super(key: key);
+  const Register({super.key});
 
   @override
   State<Register> createState() => _RegisterState();
@@ -37,19 +37,12 @@ class _RegisterState extends State<Register> {
       "data_naixement": controladorFechaNacimiento.text.trim()
     };
 
-    print("=== DATOS QUE SE VAN A ENVIAR ===");
-    print(datosRegistro);
-    print("=================================");
-
     try {
       // NUEVO: Usamos tu apiService global (que ya tiene la IP configurada)
       final response = await apiService.post(
         '/auth/register',
         data: datosRegistro,
       );
-
-      // Si llegamos aquí, el statusCode es 200 o 201 automáticamente gracias a Dio
-      print("¡Registro exitoso en consola!");
 
       if (!mounted) return;
 
@@ -69,13 +62,9 @@ class _RegisterState extends State<Register> {
       Navigator.pop(context);
 
     } on DioException catch (e) {
-      // NUEVO: Manejo de errores de Dio
-      print("Error de conexión: ${e.response?.data}");
-
       if (!mounted) return;
 
       String mensajeError = 'Error en el registro: Verifica tus datos.';
-      // Si Javier envía un mensaje de error específico, lo mostramos
       if (e.response?.data != null && e.response?.data['message'] != null) {
         mensajeError = e.response?.data['message'];
       }
@@ -87,7 +76,6 @@ class _RegisterState extends State<Register> {
         ),
       );
     } finally {
-      // NUEVO: Apagamos la ruedita de carga pase lo que pase
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -100,121 +88,112 @@ class _RegisterState extends State<Register> {
   Widget build(BuildContext context) {
     return Scaffold(
         appBar: AppBar(
-          title: Text('Registro'),
+          title: const Text('Registro'),
         ),
         body: SingleChildScrollView(
           child: Padding(
-            padding: const EdgeInsets.all(12.0),
+            padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10.0),
             child: Form(
                 key: _formkey,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-                    Padding(
-                      padding: const EdgeInsets.only(top: 20.0),
-                      child: Center(
-                        child: Container(
-                          width: 200,
-                          height: 50, // Lo he reducido un poco para que no ocupe tanto
+                    Center(
+                      child: Padding(
+                        padding: const EdgeInsets.only(bottom: 20.0),
+                        child: Image.asset(
+                          'assets/logo.png',
+                          width: 120,
+                          height: 120,
+                          fit: BoxFit.contain,
                         ),
                       ),
                     ),
                     Padding(
-                      padding: const EdgeInsets.all(12.0),
+                      padding: const EdgeInsets.only(bottom: 10.0),
                       child: TextFormField(
                         controller: controladorUsuario,
                         validator: MultiValidator([
                           RequiredValidator(errorText: 'Introduzca su nombre de usuario'),
-                        ]),
-                        decoration: InputDecoration(
-                            hintText: 'Introduzca su nombre de usuario',
+                        ]).call,
+                        decoration: const InputDecoration(
+                            isDense: true,
+                            hintText: 'Nombre de usuario',
                             labelText: 'Usuario',
-                            prefixIcon: Icon(
-                              Icons.person,
-                              color: Colors.blue,
-                            ),
-                            errorStyle: TextStyle(fontSize: 14.0),
+                            prefixIcon: Icon(Icons.person, color: Colors.blue),
                             border: OutlineInputBorder(
-                                borderSide: BorderSide(color: Colors.red),
-                                borderRadius:
-                                BorderRadius.all(Radius.circular(9.0)))),
+                                borderRadius: BorderRadius.all(Radius.circular(10.0)))),
                       ),
                     ),
-                    Padding(
-                      padding: const EdgeInsets.all(12.0),
-                      child: TextFormField(
-                        controller: controladorNombre,
-                        validator: MultiValidator([
-                          RequiredValidator(errorText: 'Introduzca su nombre'),
-                        ]),
-                        decoration: InputDecoration(
-                            hintText: 'Introduzca su nombre',
-                            labelText: 'Nombre',
-                            prefixIcon: Icon(
-                              Icons.person,
-                              color: Colors.green,
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.only(bottom: 10.0, right: 5.0),
+                            child: TextFormField(
+                              controller: controladorNombre,
+                              validator: MultiValidator([
+                                RequiredValidator(errorText: 'Obligatorio'),
+                              ]).call,
+                              decoration: const InputDecoration(
+                                  isDense: true,
+                                  hintText: 'Nombre',
+                                  labelText: 'Nombre',
+                                  prefixIcon: Icon(Icons.badge, color: Colors.green),
+                                  border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.all(Radius.circular(10.0)))),
                             ),
-                            errorStyle: TextStyle(fontSize: 14.0),
-                            border: OutlineInputBorder(
-                                borderSide: BorderSide(color: Colors.red),
-                                borderRadius:
-                                BorderRadius.all(Radius.circular(9.0)))),
-                      ),
+                          ),
+                        ),
+                        Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.only(bottom: 10.0, left: 5.0),
+                            child: TextFormField(
+                              controller: controladorApellidos,
+                              validator: MultiValidator([
+                                RequiredValidator(errorText: 'Obligatorio'),
+                              ]).call,
+                              decoration: const InputDecoration(
+                                  isDense: true,
+                                  hintText: 'Apellidos',
+                                  labelText: 'Apellidos',
+                                  prefixIcon: Icon(Icons.badge_outlined, color: Colors.grey),
+                                  border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.all(Radius.circular(10.0)))),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                     Padding(
-                      padding: const EdgeInsets.all(8.0),
-                      child: TextFormField(
-                        controller: controladorApellidos,
-                        validator: MultiValidator([
-                          RequiredValidator(errorText: 'Introduzca sus apellidos'),
-                        ]),
-                        decoration: InputDecoration(
-                            hintText: 'Introduzca sus apellidos',
-                            labelText: 'Apellidos',
-                            prefixIcon: Icon(
-                              Icons.person,
-                              color: Colors.grey,
-                            ),
-                            errorStyle: TextStyle(fontSize: 14.0),
-                            border: OutlineInputBorder(
-                                borderSide: BorderSide(color: Colors.red),
-                                borderRadius:
-                                BorderRadius.all(Radius.circular(9.0)))),
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.all(8.0),
+                      padding: const EdgeInsets.only(bottom: 10.0),
                       child: TextFormField(
                         controller: controladorEmail,
                         validator: MultiValidator([
                           RequiredValidator(errorText: 'Introduzca un email'),
-                          EmailValidator(errorText: 'Email invalido'),
-                        ]),
-                        decoration: InputDecoration(
-                            hintText: 'Introduzca un email',
+                          EmailValidator(errorText: 'Email inválido'),
+                        ]).call,
+                        decoration: const InputDecoration(
+                            isDense: true,
+                            hintText: 'nombre@ejemplo.com',
                             labelText: 'Email',
-                            prefixIcon: Icon(
-                              Icons.email,
-                              color: Colors.lightBlue,
-                            ),
-                            errorStyle: TextStyle(fontSize: 14.0),
+                            prefixIcon: Icon(Icons.email, color: Colors.lightBlue),
                             border: OutlineInputBorder(
-                                borderSide: BorderSide(color: Colors.red),
-                                borderRadius:
-                                BorderRadius.all(Radius.circular(9.0)))),
+                                borderRadius: BorderRadius.all(Radius.circular(10.0)))),
                       ),
                     ),
                     Padding(
-                        padding: const EdgeInsets.all(8.0),
+                        padding: const EdgeInsets.only(bottom: 10.0),
                         child: TextFormField(
                           controller: controladorFechaNacimiento,
                           readOnly: true,
-                          decoration: InputDecoration(
+                          decoration: const InputDecoration(
+                            isDense: true,
                             labelText: "Fecha de nacimiento",
                             hintText: "Selecciona una fecha",
                             prefixIcon: Icon(Icons.calendar_today),
                             border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(10),
+                              borderRadius: BorderRadius.all(Radius.circular(10.0)),
                             ),
                           ),
                           onTap: () async {
@@ -230,59 +209,48 @@ class _RegisterState extends State<Register> {
                               String anio = fechaSeleccionada.year.toString();
                               String mes = fechaSeleccionada.month.toString().padLeft(2, '0');
                               String dia = fechaSeleccionada.day.toString().padLeft(2, '0');
-
-                              String fechaFormateada = "$anio-$mes-$dia";
-
                               setState(() {
-                                controladorFechaNacimiento.text = fechaFormateada;
+                                controladorFechaNacimiento.text = "$anio-$mes-$dia";
                               });
                             }
                           },
                           validator: (value) {
                             if (value == null || value.isEmpty) {
-                              return "La fecha de nacimiento es obligatoria";
+                              return "Campo obligatorio";
                             }
                             return null;
                           },
                         )
                     ),
                     Padding(
-                      padding: const EdgeInsets.all(8.0),
+                      padding: const EdgeInsets.only(bottom: 20.0),
                       child: TextFormField(
                         controller: controladorPassword,
                         obscureText: true,
                         validator: MultiValidator([
                           RequiredValidator(errorText: 'Introduzca una contraseña'),
                           MinLengthValidator(8,
-                              errorText: 'La contraseña debe ser al menos de 8 caracteres'),
-                          PatternValidator(r'[A-Z]', errorText: 'Debe contener al menos una mayúscula'),
-                          PatternValidator(r'[0-9]', errorText: 'Debe contener al menos un numero'),
-                          PatternValidator(r'[$;._*]', errorText: 'Debe contener un carácter especial (;._*)'),
-                        ]),
-                        decoration: InputDecoration(
-                            hintText: 'Introduzca una contraseña',
+                              errorText: 'Mínimo 8 caracteres'),
+                          PatternValidator(r'[A-Z]', errorText: 'Debe contener una mayúscula'),
+                          PatternValidator(r'[0-9]', errorText: 'Debe contener un número'),
+                          PatternValidator(r'[$;._*]', errorText: r'Carácter especial ($;._*)'),
+                        ]).call,
+                        decoration: const InputDecoration(
+                            isDense: true,
+                            hintText: 'Cree una contraseña',
                             labelText: 'Contraseña',
-                            prefixIcon: Icon(
-                              Icons.password,
-                              color: Colors.grey,
-                            ),
-                            errorStyle: TextStyle(fontSize: 14.0),
+                            prefixIcon: Icon(Icons.lock, color: Colors.grey),
                             border: OutlineInputBorder(
-                                borderSide: BorderSide(color: Colors.red),
-                                borderRadius:
-                                BorderRadius.all(Radius.circular(9.0)))),
+                                borderRadius: BorderRadius.all(Radius.circular(10.0)))),
                       ),
                     ),
                     Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(18.0),
-                        child: Container(
-                          width: MediaQuery.of(context).size.width,
-                          height: 50,
-                          // NUEVO: Mostramos la ruedita si _isLoading es true
-                          child: _isLoading
-                              ? Center(child: CircularProgressIndicator())
-                              : ElevatedButton(
+                      child: SizedBox(
+                        width: double.infinity,
+                        height: 50,
+                        child: _isLoading
+                            ? const Center(child: CircularProgressIndicator())
+                            : ElevatedButton(
                             onPressed: () {
                               if (_formkey.currentState!.validate()) {
                                 registrarUsuario();
@@ -294,15 +262,11 @@ class _RegisterState extends State<Register> {
                                 borderRadius: BorderRadius.circular(30),
                               ),
                             ),
-                            child: Text(
+                            child: const Text(
                               'Registrarme',
-                              style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 22
-                              ),
+                              style: TextStyle(color: Colors.white, fontSize: 20),
                             ),
                           ),
-                        ),
                       ),
                     ),
                   ],

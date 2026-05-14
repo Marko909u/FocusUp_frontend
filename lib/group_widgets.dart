@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 class GroupRanking extends StatelessWidget {
   final List<dynamic> members;
 
-  const GroupRanking({Key? key, required this.members}) : super(key: key);
+  const GroupRanking({super.key, required this.members});
 
   @override
   Widget build(BuildContext context) {

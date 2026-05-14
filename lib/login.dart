@@ -1,14 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:focusup/app.dart';
 import 'package:form_field_validator/form_field_validator.dart';
-import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart'; // <--- CAMBIADO
-import 'dart:convert';
 import 'token_storage.dart'; 
 import 'api_service.dart'; // <--- AÑADIDO
 
 class Login extends StatefulWidget {
-  const Login({Key? key}) : super(key: key);
+  const Login({super.key});
 
   @override
   State<Login> createState() => _LoginState();
@@ -102,10 +100,11 @@ class _LoginState extends State<Login> {
                 Padding(
                   padding: const EdgeInsets.only(top: 20.0, bottom: 20.0),
                   child: Center(
-                    child: Container(
-                      width: 200,
+                    child: Image.asset(
+                      'assets/logo.png',
+                      width: 150,
                       height: 150,
-                      child: const Icon(Icons.lock_person, size: 100, color: Colors.blue),
+                      fit: BoxFit.contain,
                     ),
                   ),
                 ),
@@ -118,7 +117,7 @@ class _LoginState extends State<Login> {
                       RequiredValidator(errorText: 'Introduzca su nombre de usuario o correo'),
                       MinLengthValidator(3,
                           errorText: 'El nombre debe tener al menos 3 caracteres'),
-                    ]),
+                    ]).call,
                     decoration: const InputDecoration(
                       hintText: 'Introduzca su correo electrónico',
                       labelText: 'Usuario / Email',
@@ -144,7 +143,7 @@ class _LoginState extends State<Login> {
                     validator: MultiValidator([
                       RequiredValidator(errorText: 'Introduzca una contraseña'),
                       MinLengthValidator(3, errorText: 'La contraseña debe tener al menos 3 caracteres'),
-                    ]),
+                    ]).call,
                     decoration: const InputDecoration(
                       hintText: 'Introduzca su contraseña',
                       labelText: 'Contraseña',

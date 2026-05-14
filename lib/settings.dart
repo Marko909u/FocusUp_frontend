@@ -4,7 +4,7 @@ import 'main.dart';
 import 'api_service.dart';
 
 class SettingsPage extends StatefulWidget {
-  const SettingsPage({Key? key}) : super(key: key);
+  const SettingsPage({super.key});
 
   @override
   _SettingsPageState createState() => _SettingsPageState();
@@ -66,7 +66,7 @@ class _SettingsPageState extends State<SettingsPage> {
 }
 
 class AccountSettingsPage extends StatelessWidget {
-  const AccountSettingsPage({Key? key}) : super(key: key);
+  const AccountSettingsPage({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -102,7 +102,7 @@ class AccountSettingsPage extends StatelessWidget {
 
 // --- PANTALLA: CAMBIAR EMAIL ---
 class ChangeEmailPage extends StatefulWidget {
-  const ChangeEmailPage({Key? key}) : super(key: key);
+  const ChangeEmailPage({super.key});
 
   @override
   _ChangeEmailPageState createState() => _ChangeEmailPageState();
@@ -168,7 +168,7 @@ class _ChangeEmailPageState extends State<ChangeEmailPage> {
 
 // --- PANTALLA: CAMBIAR CONTRASEÑA ---
 class ChangePasswordPage extends StatefulWidget {
-  const ChangePasswordPage({Key? key}) : super(key: key);
+  const ChangePasswordPage({super.key});
 
   @override
   _ChangePasswordPageState createState() => _ChangePasswordPageState();
@@ -240,7 +240,7 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
 
 // --- PANTALLA: CAMBIAR NOMBRE/APELLIDOS ---
 class ChangeUsernamePage extends StatefulWidget {
-  const ChangeUsernamePage({Key? key}) : super(key: key);
+  const ChangeUsernamePage({super.key});
 
   @override
   _ChangeUsernamePageState createState() => _ChangeUsernamePageState();
