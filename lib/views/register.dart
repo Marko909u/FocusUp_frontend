@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:form_field_validator/form_field_validator.dart';
-import 'package:dio/dio.dart'; // Importamos Dio
-import 'api_service.dart'; // Importamos tu servicio centralizado
+import 'package:dio/dio.dart';
+import '../core/api_service.dart';
 
 class Register extends StatefulWidget {
   const Register({super.key});
@@ -19,11 +19,9 @@ class _RegisterState extends State<Register> {
   final controladorApellidos = TextEditingController();
   final controladorFechaNacimiento = TextEditingController();
 
-  // NUEVO: Variable para controlar la ruedita de carga
   bool _isLoading = false;
 
   Future<void> registrarUsuario() async {
-    // NUEVO: Activamos la ruedita de carga
     setState(() {
       _isLoading = true;
     });
@@ -38,8 +36,7 @@ class _RegisterState extends State<Register> {
     };
 
     try {
-      // NUEVO: Usamos tu apiService global (que ya tiene la IP configurada)
-      final response = await apiService.post(
+      await apiService.post(
         '/auth/register',
         data: datosRegistro,
       );
@@ -58,7 +55,6 @@ class _RegisterState extends State<Register> {
         ),
       );
 
-      // NUEVO: Volvemos a la pantalla de Login automáticamente
       Navigator.pop(context);
 
     } on DioException catch (e) {

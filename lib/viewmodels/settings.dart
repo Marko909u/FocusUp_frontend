@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
-import 'main.dart'; 
-import 'api_service.dart';
+import '../main.dart';
+import '../core/api_service.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});

@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:focusup/app.dart';
-import 'package:focusup/login.dart';
-import 'package:focusup/register.dart';
+import 'views/pagina_principal.dart';
+import 'package:focusup/core/api_service.dart';
+import 'package:focusup/core/token_storage.dart';
+import 'views/login.dart';
+import 'views/register.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'token_storage.dart';
-import 'api_service.dart';
+
 
 // Notificador global para el tema
 final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.light);

@@ -1,6 +1,6 @@
 import 'package:dio/dio.dart';
-import 'token_storage.dart'; 
-import 'main.dart'; // Importamos main.dart para acceder al navigatorKey
+import 'token_storage.dart';
+import '../main.dart'; // Importamos main.dart para acceder al navigatorKey
 
 class ApiService {
   late Dio dio;

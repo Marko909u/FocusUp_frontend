@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:focusup/app.dart';
+import 'package:focusup/views/pagina_principal.dart';
 import 'package:form_field_validator/form_field_validator.dart';
 import 'package:dio/dio.dart';
-import 'token_storage.dart'; 
-import 'api_service.dart';
+import '../core/token_storage.dart';
+import '../core/api_service.dart';
 
 class Login extends StatefulWidget {
   const Login({super.key});
@@ -33,9 +33,8 @@ class _LoginState extends State<Login> {
       print("📦 Respuesta del Backend: $decodedBody");
       
       String? token;
-      String email = controladorUsuario.text; // Valor por defecto
+      String email = controladorUsuario.text;
 
-      // 2. Si es un mapa (JSON), buscamos la clave 'token' y 'email'
       if (decodedBody is Map) {
         token = decodedBody['token']?.toString();
         if (decodedBody.containsKey('email')) {
@@ -45,10 +44,10 @@ class _LoginState extends State<Login> {
         token = decodedBody.toString();
       }
 
-      print("🎫 Token extraído: $token");
+      print(" Token extraído: $token");
 
       if (token == null || token.isEmpty || token == "null") {
-        print("❌ ERROR: El token recibido es nulo o inválido");
+        print(" ERROR: El token recibido es nulo o inválido");
         throw Exception("Token no encontrado en la respuesta");
       }
 

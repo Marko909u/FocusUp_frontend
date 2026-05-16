@@ -15,7 +15,6 @@ Dio createDio() {
       }
       return handler.next(options);
     },
-    // También puedes manejar errores 403 (Token caducado) aquí para forzar el logout
   ));
 
   return dio;
